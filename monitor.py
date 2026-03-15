@@ -85,6 +85,23 @@ def build_horse_names(race_id: str, odds_map: dict[int, float]) -> dict[int, str
     return {n: f"{n}番" for n in odds_map}
 
 
+def _send_hourly_status(now: datetime, active_races: int,
+                        hourly_polls: int, hourly_signals: int,
+                        total_signals: int):
+    """Send hourly heartbeat to Telegram."""
+    ts = now.strftime("%H:%M")
+    lines = [
+        f"<b>{ts} 定期レポート</b>",
+        "",
+        f"  監視中: {active_races} レース",
+        f"  直近1h: {hourly_polls} 回ポーリング / {hourly_signals} 件シグナル",
+        f"  本日累計シグナル: {total_signals} 件",
+        "",
+        "━━━━━━━━━━━━",
+    ]
+    send_message("\n".join(lines))
+
+
 def poll_once(races: list[dict]) -> tuple[int, int]:
     """Execute one polling cycle. Returns (snapshots_saved, signals_fired)."""
     now = now_jst()
@@ -225,10 +242,6 @@ def run_monitor():
             races += fetch_jra_race_list(date_str)
         except Exception:
             logger.exception("Failed to fetch JRA race list")
-        try:
-            races += fetch_nar_race_list(date_str)
-        except Exception:
-            logger.exception("Failed to fetch NAR race list")
 
         if not races:
             logger.info("No races found. Sleeping 30min")
@@ -239,6 +252,9 @@ def run_monitor():
 
         # Inner polling loop (re-fetch race list every hour)
         inner_start = time.time()
+        hourly_polls = 0
+        hourly_signals = 0
+
         while time.time() - inner_start < 3600:
             now = now_jst()
             if now.hour >= MONITOR_END_HOUR:
@@ -256,6 +272,8 @@ def run_monitor():
                 saved, fired = poll_once(active)
                 total_polls += 1
                 total_signals += fired
+                hourly_polls += 1
+                hourly_signals += fired
                 for s_type in signal_counts:
                     # Update signal counts from DB would be ideal,
                     # but for simplicity just track fired
@@ -267,6 +285,12 @@ def run_monitor():
             # Sleep until next poll
             logger.info(f"Sleeping {interval}s until next poll")
             time.sleep(interval)
+
+        # Hourly status report
+        now = now_jst()
+        if now.hour < MONITOR_END_HOUR and hourly_polls > 0:
+            active_count = len(filter_active_races(races, now))
+            _send_hourly_status(now, active_count, hourly_polls, hourly_signals, total_signals)
 
     logger.info("Monitor stopped")
 
