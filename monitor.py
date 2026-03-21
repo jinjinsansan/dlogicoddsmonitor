@@ -184,9 +184,6 @@ def poll_once(races: list[dict]) -> tuple[int, int]:
                         sig["horse_name"], sig["detail"])
             signals_fired += 1
 
-        snapshots_history = get_snapshots(race_id, limit=6)
-        msg = format_signal_message(race, new_signals, snapshots_history)
-        send_message(msg)
         logger.info(f"Signal: {race_id} -> {[s['type'] for s in new_signals]}")
 
     return snapshots_saved, signals_fired
