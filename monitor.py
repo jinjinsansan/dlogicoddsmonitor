@@ -145,12 +145,13 @@ def poll_once(races: list[dict]) -> tuple[int, int]:
 
         race["race_date"] = now.strftime("%Y-%m-%d")
 
+        # Get previous snapshot for comparison (before saving new one)
+        prev = get_latest_snapshot(race_id)
+
         # Save snapshot
         save_snapshot(race, current_odds)
         snapshots_saved += 1
 
-        # Get previous snapshot for comparison
-        prev = get_latest_snapshot(race_id)
         if not prev:
             continue
 
@@ -197,7 +198,7 @@ def run_monitor():
     logger.info("Odds Monitor started")
     logger.info("=" * 50)
 
-    send_message("🟢 <b>オッズモニター起動</b>\nJRA + NAR の監視を開始します。")
+    send_message("🟢 <b>オッズモニター起動</b>\nJRA + 地方競馬 の監視を開始します。")
 
     total_polls = 0
     total_signals = 0
@@ -242,6 +243,11 @@ def run_monitor():
             races += fetch_jra_race_list(date_str)
         except Exception:
             logger.exception("Failed to fetch JRA race list")
+
+        try:
+            races += fetch_nar_race_list(date_str)
+        except Exception:
+            logger.exception("Failed to fetch NAR race list")
 
         if not races:
             logger.info("No races found. Sleeping 30min")
