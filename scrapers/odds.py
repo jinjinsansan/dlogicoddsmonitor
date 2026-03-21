@@ -275,7 +275,7 @@ def fetch_jra_race_list(date_str: str) -> list[dict]:
                     race_name = rn_el2.get_text(strip=True)
 
                 post_time = ""
-                time_el = li.select_one(".RaceList_ItemTime")
+                time_el = li.select_one(".RaceList_Itemtime, .RaceList_ItemTime")
                 if time_el:
                     post_time = time_el.get_text(strip=True)
 
@@ -331,9 +331,18 @@ def fetch_nar_race_list(date_str: str) -> list[dict]:
                 race_name = rn_el2.get_text(strip=True)
 
             post_time = ""
-            time_el = li.select_one(".RaceList_ItemTime")
+            time_el = li.select_one(".RaceList_Itemtime, .RaceList_ItemTime")
             if time_el:
                 post_time = time_el.get_text(strip=True)
+            else:
+                # NAR: time is in a plain <span> inside .RaceData
+                race_data = li.select_one(".RaceData")
+                if race_data:
+                    for span in race_data.select("span"):
+                        txt = span.get_text(strip=True)
+                        if re.match(r"^\d{1,2}:\d{2}$", txt):
+                            post_time = txt
+                            break
 
             races.append({
                 "race_id": race_id,

@@ -16,9 +16,9 @@ NETKEIBA_JRA_BASE = "https://race.netkeiba.com"
 NETKEIBA_NAR_BASE = "https://nar.netkeiba.com"
 
 # --- Polling intervals (seconds) ---
-POLL_NORMAL = 600       # 10 min (発走60分前以上)
-POLL_CLOSE = 300        # 5 min  (発走60〜15分前)
-POLL_FINAL = 180        # 3 min  (発走15分前以内)
+POLL_NORMAL = 1200      # 20 min (発走60分前以上)
+POLL_CLOSE = 600        # 10 min (発走60〜15分前)
+POLL_FINAL = 300        # 5 min  (発走15分前以内)
 
 # --- Signal thresholds ---
 THRESHOLDS = {
