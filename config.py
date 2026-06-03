@@ -34,3 +34,8 @@ THRESHOLDS = {
 # JRA: 発売は通常 9:30〜, NAR: 会場による
 MONITOR_START_HOUR = 8      # 監視開始（JST）
 MONITOR_END_HOUR = 21       # 監視終了（JST）
+
+# --- Race type coverage ---
+# NAR(地方)はオッズプールが小さく変動が激しすぎてシグナルがノイズ化するため
+# 既定で監視対象外。JRA限定運用。再有効化は env MONITOR_NAR=true。
+MONITOR_NAR = os.getenv("MONITOR_NAR", "false").lower() == "true"

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from config import (
     POLL_NORMAL, POLL_CLOSE, POLL_FINAL,
     THRESHOLDS, MONITOR_START_HOUR, MONITOR_END_HOUR,
+    MONITOR_NAR,
 )
 from scrapers.odds import (
     fetch_jra_odds_batch, fetch_nar_odds_batch,
@@ -241,10 +242,11 @@ def run_monitor():
         except Exception:
             logger.exception("Failed to fetch JRA race list")
 
-        try:
-            races += fetch_nar_race_list(date_str)
-        except Exception:
-            logger.exception("Failed to fetch NAR race list")
+        if MONITOR_NAR:
+            try:
+                races += fetch_nar_race_list(date_str)
+            except Exception:
+                logger.exception("Failed to fetch NAR race list")
 
         if not races:
             logger.info("No races found. Sleeping 30min")
