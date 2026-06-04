@@ -28,7 +28,12 @@ export type Sig = {
 };
 
 export type PreviewHorse = { num: number; name: string; jockey: string; okScore?: number | null };
-export type PreviewCard = { raceId: string; venue: string; raceNumber: number; postTime: string; horses: PreviewHorse[] };
+// 番組表(レース一覧)カード: その日の各レース + 状態サマリー + 注目馬
+export type RaceCard = {
+  raceId: string; venue: string; raceNumber: number; postTime: string;
+  drop: number; surge: number; reversal: number; honmei: boolean;
+  picks: PreviewHorse[];
+};
 
 export type RaceHorse = {
   num: number;

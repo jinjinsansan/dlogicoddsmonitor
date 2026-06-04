@@ -1,4 +1,4 @@
-import type { Sig, Race, PreviewCard } from "@/components/ui";
+import type { Sig, Race, RaceCard } from "@/components/ui";
 
 // 監視(VPS)が生成する完成JSONの配信元。読み取り経路にDBは無い。
 // Vercel側のfetchデータキャッシュ(revalidate)でエッジキャッシュ＝サクサク。
@@ -12,13 +12,13 @@ export type BoardPayload = {
   targetLabel: string;  // 例 6/7(日)
   liveStartMs: number | null;
   signals: Sig[];
-  preview: PreviewCard[];
+  races: RaceCard[];
   updatedAt: string;
 };
 
 const EMPTY: BoardPayload = {
   mode: "finished", targetDate: "", targetLabel: "", liveStartMs: null,
-  signals: [], preview: [], updatedAt: new Date().toISOString(),
+  signals: [], races: [], updatedAt: new Date().toISOString(),
 };
 
 export async function loadBoard(): Promise<BoardPayload> {
@@ -32,7 +32,7 @@ export async function loadBoard(): Promise<BoardPayload> {
       targetLabel: d.targetLabel || "",
       liveStartMs: d.liveStartMs ?? null,
       signals: (d.signals as Sig[]) || [],
-      preview: (d.preview as PreviewCard[]) || [],
+      races: (d.races as RaceCard[]) || [],
       updatedAt: d.updatedAt || new Date().toISOString(),
     };
   } catch {

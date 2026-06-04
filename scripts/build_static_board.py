@@ -45,6 +45,18 @@ except Exception:
 JST = timezone(timedelta(hours=9))
 JRA_VENUES = ['東京', '中山', '阪神', '京都', '中京', '新潟', '福島', '小倉', '札幌', '函館']
 WD = ["月", "火", "水", "木", "金", "土", "日"]
+# netkeiba race_id(12桁) のトラックコード(5-6桁目)→会場。scraperのvenueは誤る事があるので race_id から導出。
+VENUE_BY_CODE = {
+    "01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京",
+    "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉",
+}
+
+
+def venue_of(race_id, fallback=""):
+    try:
+        return VENUE_BY_CODE.get(str(race_id)[4:6], fallback)
+    except Exception:
+        return fallback
 
 BASE = "/opt/dlogic/odds-monitor"
 OUT = os.path.join(BASE, "static_out")
@@ -221,7 +233,7 @@ def sig_from_row(row, entries, scores):
     stype = row.get("signal_type")
     return {
         "id": row.get("id"), "raceId": row.get("race_id"),
-        "venue": row.get("venue") or "", "raceNumber": row.get("race_number") or 0,
+        "venue": venue_of(row.get("race_id"), row.get("venue") or ""), "raceNumber": row.get("race_number") or 0,
         "type": stype, "horseNumber": num,
         "currOdds": d.get("curr_odds", d.get("new_fav_odds_curr")),
         "prevOdds": d.get("prev_odds", d.get("new_fav_odds_prev")),
@@ -252,12 +264,38 @@ def build_signals_for_date(target_iso, entries_cache, scores):
     return out
 
 
-def build_preview(races, entries_cache, scores):
+def day_signal_summary(target_iso, entries_cache, scores):
+    """その日の全シグナルをレース別に集計(急落/急騰/逆転数・本命有無)。"""
+    rows = (c.table("odds_signals")
+            .select("race_id,signal_type,horse_number")
+            .in_("venue", JRA_VENUES).eq("race_date", target_iso)
+            .limit(5000).execute().data) or []
+    seen = set()
+    summ = {}
+    for r in rows:
+        rid, hn, st = r["race_id"], r["horse_number"], r["signal_type"]
+        key = f"{rid}:{hn}:{st}"
+        if key in seen:
+            continue
+        seen.add(key)
+        s = summ.setdefault(rid, {"drop": 0, "surge": 0, "reversal": 0, "honmei": False})
+        if st in s:
+            s[st] += 1
+        if st == "drop":
+            nm = ((entries_cache.get(rid) or {}).get(str(hn)) or {}).get("name")
+            sc = scores.get(nm) if nm else None
+            if sc is not None and sc >= HONMEI_MIN:
+                s["honmei"] = True
+    return summ
+
+
+def build_races(races_list, summary, entries_cache, scores):
+    """その日の全レース(番組表)カード: 状態サマリー + 注目馬(指数上位)。"""
     cards = []
-    for r in sorted(races, key=lambda x: x.get("post_time") or ""):
+    for r in sorted(races_list, key=lambda x: (x.get("post_time") or "", x.get("venue") or "")):
         rid = r["race_id"]
         ent = entries_cache.get(rid) or {}
-        horses = []
+        picks = []
         for num_s, info in ent.items():
             try:
                 num = int(num_s)
@@ -265,11 +303,15 @@ def build_preview(races, entries_cache, scores):
                 continue
             nm = info.get("name") if isinstance(info, dict) else info
             jk = info.get("jockey", "") if isinstance(info, dict) else ""
-            horses.append({"num": num, "name": nm, "jockey": jk, "okScore": scores.get(nm)})
-        horses.sort(key=lambda h: h["num"])
+            picks.append({"num": num, "name": nm, "jockey": jk, "okScore": scores.get(nm)})
+        picks.sort(key=lambda h: (h["okScore"] is None, -(h["okScore"] or 0), h["num"]))
+        s = summary.get(rid, {})
         cards.append({
-            "raceId": rid, "venue": r.get("venue") or "", "raceNumber": r.get("race_number") or 0,
-            "postTime": r.get("post_time") or "", "horses": horses,
+            "raceId": rid, "venue": venue_of(rid, r.get("venue") or ""), "raceNumber": r.get("race_number") or 0,
+            "postTime": r.get("post_time") or "",
+            "drop": s.get("drop", 0), "surge": s.get("surge", 0), "reversal": s.get("reversal", 0),
+            "honmei": s.get("honmei", False),
+            "picks": picks[:3],
         })
     return cards
 
@@ -282,7 +324,7 @@ def build_race(race_id, entries, scores):
                  .select("snapshot_at,odds_data,venue,race_number")
                  .eq("race_id", race_id).order("snapshot_at", desc=False).limit(300).execute().data) or []
 
-    venue = (sig_rows[0]["venue"] if sig_rows else "") or (snap_rows[0]["venue"] if snap_rows else "")
+    venue = venue_of(race_id, (sig_rows[0]["venue"] if sig_rows else "") or (snap_rows[0]["venue"] if snap_rows else ""))
     race_number = (sig_rows[0]["race_number"] if sig_rows else 0) or (snap_rows[0]["race_number"] if snap_rows else 0)
 
     horses, snap_times = [], []
@@ -368,17 +410,17 @@ def main():
     date_str = target.strftime("%Y%m%d")
     target_label = label_of(target)
 
-    # 対象レース一覧(出馬表のため)。preview/全モードで取得。
-    races = get_race_list(date_str)
-
+    # その日の全レース(番組表)。レース一覧タブ・詳細ページの母集合。
+    races_list = get_race_list(date_str)
+    race_ids = list(dict.fromkeys([r["race_id"] for r in races_list]))
+    # シグナル側の race_id も詳細ページ用に合流(取りこぼし防止)
     if mode in ("live", "finished"):
-        # シグナル対象レース + 一覧の race_id の出馬表を確保
         sig_rids = [r["race_id"] for r in (c.table("odds_signals")
                     .select("race_id").in_("venue", JRA_VENUES).eq("race_date", target_iso)
-                    .limit(2000).execute().data or [])]
-        race_ids = list(dict.fromkeys(sig_rids + [r["race_id"] for r in races]))
-    else:
-        race_ids = [r["race_id"] for r in races]
+                    .limit(3000).execute().data or [])]
+        for rid in sig_rids:
+            if rid not in race_ids:
+                race_ids.append(rid)
 
     ensure_entries(race_ids, entries_cache)
 
@@ -390,18 +432,15 @@ def main():
                 names.append(nm)
     scores = run_scoring(names)
 
-    if mode in ("live", "finished"):
-        signals = build_signals_for_date(target_iso, entries_cache, scores)
-        preview = []
-    else:
-        signals = []
-        preview = build_preview(races, entries_cache, scores)
+    signals = build_signals_for_date(target_iso, entries_cache, scores) if mode in ("live", "finished") else []
+    summary = day_signal_summary(target_iso, entries_cache, scores)
+    races_cards = build_races(races_list, summary, entries_cache, scores)
 
     live_start_ms = int(datetime.combine(target, datetime.min.time(), JST).replace(hour=LIVE_HOUR).timestamp() * 1000)
     board = {
         "targetDate": date_str, "targetLabel": target_label, "mode": mode,
         "liveStartMs": live_start_ms,
-        "signals": signals, "preview": preview,
+        "signals": signals, "races": races_cards,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
     save_json(os.path.join(out_dir, "board.json"), board)
@@ -413,7 +452,8 @@ def main():
             print(f"  race {rid} 失敗: {ex}", flush=True)
 
     honmei = len([1 for s in signals if s.get("honmei")])
-    print(f"[{target_label} {mode}] signals={len(signals)}(本命{honmei}) preview={len(preview)} races={len(race_ids)} @ {board['updatedAt']}", flush=True)
+    hon_races = len([1 for r in races_cards if r.get("honmei")])
+    print(f"[{target_label} {mode}] signals={len(signals)}(本命{honmei}) races={len(races_cards)}(本命{hon_races}) detail={len(race_ids)} @ {board['updatedAt']}", flush=True)
 
 
 if __name__ == "__main__":

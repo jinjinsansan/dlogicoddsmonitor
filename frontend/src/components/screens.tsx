@@ -4,7 +4,7 @@ import { Mascot, MascotMark } from "./Mascot";
 import {
   SIGNAL_META, fmtOdds, fmtPct, fmtClock, postState, okGrade,
   CountUp, Sparkline, LiveDot, TypeBadge, GradeChip, SignalRow, Ticker, OddsTrendChart, OkScore,
-  type Sig, type Race, type PreviewCard, type PreviewHorse,
+  type Sig, type Race, type RaceCard, type PreviewHorse,
 } from "./ui";
 import type { BoardPayload } from "@/lib/static";
 import { pushSupported, isTracked, trackRace, untrackRace } from "@/lib/push";
@@ -124,17 +124,17 @@ function activeVenues(signals: Sig[]) {
 
 // ============ LP ============
 export function LandingScreen({ now, board, nav }: { now: number; board: BoardPayload; nav: Nav }) {
-  const { signals, mode, preview, targetLabel } = board;
+  const { signals, mode, races, targetLabel } = board;
   const miniSignals = signals.slice(0, 4);
   // 事前情報用: 注目馬(指数A/B)を数頭ピック
   const miniPicks = useMemo(() => {
-    const out: { card: PreviewCard; h: PreviewHorse }[] = [];
-    for (const card of preview) {
-      const best = card.horses.filter((h) => (h.okScore ?? 0) >= 70).sort((a, b) => (b.okScore ?? 0) - (a.okScore ?? 0))[0];
+    const out: { card: RaceCard; h: PreviewHorse }[] = [];
+    for (const card of races) {
+      const best = card.picks.find((h) => (h.okScore ?? 0) >= 70);
       if (best) out.push({ card, h: best });
     }
     return out.sort((a, b) => (b.h.okScore ?? 0) - (a.h.okScore ?? 0)).slice(0, 4);
-  }, [preview]);
+  }, [races]);
   // 「中を見る」系は guarded nav に委ねる(未登録ならKyApp側でゲートが開く)
   const openGate = () => nav({ screen: "board" });
   const counts = useMemo(() => ({
@@ -269,18 +269,44 @@ function fmtCountdown(ms: number) {
   return `${m}分`;
 }
 
-function PreviewRaceCard({ card, nav }: { card: PreviewCard; nav: Nav }) {
-  const ranked = card.horses.slice().sort((a, b) => (b.okScore ?? 0) - (a.okScore ?? 0));
-  const picks = (ranked.filter((h) => (h.okScore ?? 0) >= 70).slice(0, 3));
-  const top = picks.length ? picks : ranked.slice(0, 3);
+// レース一覧(番組表)カード: 状態バッジ + 注目馬 + 🔔追跡
+function RaceCardItem({ card, nav, now }: { card: RaceCard; nav: Nav; now: number }) {
+  const [tracked, setTrackedState] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [supported, setSupported] = useState(false);
+  useEffect(() => { setSupported(pushSupported()); setTrackedState(isTracked(card.raceId)); }, [card.raceId]);
+  const toggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (tracked) { await untrackRace(card.raceId); setTrackedState(false); }
+      else { await trackRace(card.raceId); setTrackedState(true); }
+    } catch (err) {
+      const msg = (err as Error)?.message;
+      if (msg === "denied") alert("通知がブロックされています。ブラウザの設定で通知を許可してください。");
+      else if (msg === "unsupported") alert("このブラウザは通知に対応していません。");
+      else alert("追跡の登録に失敗しました。");
+    } finally { setBusy(false); }
+  };
+  const noMove = !card.honmei && card.drop === 0 && card.surge === 0 && card.reversal === 0;
   return (
-    <button className="ky-prace" onClick={() => nav({ screen: "race", raceId: card.raceId })}>
+    <div className={`ky-prace ${card.honmei ? "is-honmei" : ""}`} role="button" tabIndex={0}
+      onClick={() => nav({ screen: "race", raceId: card.raceId })}
+      onKeyDown={(e) => { if (e.key === "Enter") nav({ screen: "race", raceId: card.raceId }); }}>
       <div className="ky-prace-h">
         <span className="ky-prace-r">{card.venue}<b>{card.raceNumber}R</b></span>
         <span className="ky-muted nums">{card.postTime}発走</span>
       </div>
+      <div className="ky-prace-badges">
+        {card.honmei && <span className="ky-honmei">本命</span>}
+        {card.drop > 0 && <span className="ky-pb" style={{ color: "var(--drop)" }}>▼{card.drop}</span>}
+        {card.surge > 0 && <span className="ky-pb" style={{ color: "var(--surge)" }}>▲{card.surge}</span>}
+        {card.reversal > 0 && <span className="ky-pb" style={{ color: "var(--reversal)" }}>⇄{card.reversal}</span>}
+        {noMove && <span className="ky-muted" style={{ fontSize: 12 }}>動きなし</span>}
+      </div>
       <div className="ky-prace-picks">
-        {top.map((h) => (
+        {card.picks.slice(0, 3).map((h) => (
           <div className="ky-prace-pick" key={h.num}>
             <span className="ky-prace-num nums">{h.num}</span>
             <span className="ky-prace-name">{h.name}</span>
@@ -288,64 +314,56 @@ function PreviewRaceCard({ card, nav }: { card: PreviewCard; nav: Nav }) {
           </div>
         ))}
       </div>
-      <div className="ky-prace-foot ky-muted nums">{card.horses.length}頭 · 注目馬</div>
-    </button>
-  );
-}
-
-function PreviewBoard({ now, preview, nav, targetLabel, liveStartMs }:
-  { now: number; preview: PreviewCard[]; nav: Nav; targetLabel: string; liveStartMs: number | null }) {
-  const [venue, setVenue] = useState("all");
-  const venues = ["all", ...Array.from(new Set(preview.map((c) => c.venue).filter(Boolean)))];
-  const shown = preview.filter((c) => venue === "all" || c.venue === venue);
-  const cd = liveStartMs ? fmtCountdown(liveStartMs - now) : null;
-  return (
-    <div className="ky-board">
-      <AppHeader now={now} nav={nav} mode="preview" targetLabel={targetLabel} />
-      <div className="ky-board-in">
-        <div className="ky-preview-banner">
-          <Mascot size={52} mood="happy" color={MASCOT_COLOR} idle glow={false} />
-          <div className="ky-preview-banner-tx">
-            <div className="ky-preview-banner-t"><b>{targetLabel}</b> の事前情報</div>
-            <div className="ky-preview-banner-d">{cd ? `あと ${cd} で急変監視スタート` : "まもなく急変監視スタート"}・出馬表と注目馬を先取りチェック！</div>
-          </div>
-        </div>
-
-        <div className="ky-filterbar">
-          <span className="ky-muted nums" style={{ fontSize: 13 }}>{shown.length} レース</span>
-          <div className="ky-venue-wrap">
-            <select className="ky-venue nums" value={venue} onChange={(e) => setVenue(e.target.value)}>
-              {venues.map((v) => <option key={v} value={v}>{v === "all" ? "全会場" : v}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="ky-legend">
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-high ky-ok-sm"><span className="ky-ok-val">A</span></span>実力上位</span>
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-mid ky-ok-sm"><span className="ky-ok-val">B</span></span>有力</span>
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-low ky-ok-sm"><span className="ky-ok-val">C</span></span>標準</span>
-          <button className="ky-link ky-legend-more" onClick={() => nav({ screen: "guide" })}>くわしい使い方 →</button>
-        </div>
-
-        {shown.length ? (
-          <div className="ky-preview-grid">
-            {shown.map((card) => <PreviewRaceCard key={card.raceId} card={card} nav={nav} />)}
-          </div>
-        ) : (
-          <div className="ky-empty">
-            <Mascot size={104} mood="idle" color={MASCOT_COLOR} />
-            <div className="ky-empty-t">事前情報を準備中です。</div>
-          </div>
-        )}
-
-        <p className="ky-fineprint">事前情報＝出馬表＋オッズくん指数(A/B/C)。オッズの急変は監視開始後に表示されます。※情報ツールであり的中・利益を保証するものではありません。</p>
-      </div>
+      {supported && (
+        <button className={`ky-prace-track ${tracked ? "is-on" : ""}`} onClick={toggle} disabled={busy} aria-label="このレースを追跡">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+          {tracked ? "追跡中" : "追跡"}
+        </button>
+      )}
     </div>
   );
 }
 
+function RaceList({ now, races, nav, mode, targetLabel, liveStartMs }:
+  { now: number; races: RaceCard[]; nav: Nav; mode: string; targetLabel: string; liveStartMs: number | null }) {
+  const [venue, setVenue] = useState("all");
+  const venues = ["all", ...Array.from(new Set(races.map((r) => r.venue).filter(Boolean)))];
+  const shown = races.filter((r) => venue === "all" || r.venue === venue);
+  const cd = mode === "preview" && liveStartMs ? fmtCountdown(liveStartMs - now) : null;
+  return (
+    <>
+      {mode === "preview" && (
+        <div className="ky-preview-banner">
+          <Mascot size={52} mood="happy" color={MASCOT_COLOR} idle glow={false} />
+          <div className="ky-preview-banner-tx">
+            <div className="ky-preview-banner-t"><b>{targetLabel}</b> の事前情報</div>
+            <div className="ky-preview-banner-d">{cd ? `あと ${cd} で急変監視スタート` : "まもなく急変監視スタート"}・気になるレースを追跡しておこう！</div>
+          </div>
+        </div>
+      )}
+      <div className="ky-filterbar">
+        <span className="ky-muted nums" style={{ fontSize: 13 }}>{shown.length} レース</span>
+        <div className="ky-venue-wrap">
+          <select className="ky-venue nums" value={venue} onChange={(e) => setVenue(e.target.value)}>
+            {venues.map((v) => <option key={v} value={v}>{v === "all" ? "全会場" : v}</option>)}
+          </select>
+        </div>
+      </div>
+      {shown.length ? (
+        <div className="ky-preview-grid">
+          {shown.map((card) => <RaceCardItem key={card.raceId} card={card} nav={nav} now={now} />)}
+        </div>
+      ) : (
+        <div className="ky-empty"><Mascot size={104} mood="idle" color={MASCOT_COLOR} /><div className="ky-empty-t">レース情報を準備中です。</div></div>
+      )}
+      <p className="ky-fineprint">タップでレース詳細・🔔で発走直前の通知を追跡。指数(A/B/C)＝馬の実力評価。※情報ツールであり的中・利益を保証するものではありません。</p>
+    </>
+  );
+}
+
 export function BoardScreen({ now, board, nav, freshId }: { now: number; board: BoardPayload; nav: Nav; freshId: string | number | null }) {
-  const { signals, mode, preview, targetLabel, liveStartMs } = board;
+  const { signals, mode, races, targetLabel, liveStartMs } = board;
+  const [tab, setTab] = useState<"signal" | "races">(mode === "preview" ? "races" : "signal");
   const [filter, setFilter] = useState<string>("drop");
   const [venue, setVenue] = useState("all");
   const venues = ["all", ...useMemo(() => activeVenues(signals), [signals])];
@@ -369,7 +387,7 @@ export function BoardScreen({ now, board, nav, freshId }: { now: number; board: 
     [signals]
   );
   useEffect(() => {
-    if (!spotlightPool.length) { setSpot(null); setReact(false); return; }
+    if (tab !== "signal" || !spotlightPool.length) { setSpot(null); setReact(false); return; }
     let alive = true;
     let hideT: ReturnType<typeof setTimeout>;
     const tick = () => {
@@ -383,88 +401,103 @@ export function BoardScreen({ now, board, nav, freshId }: { now: number; board: 
     tick();
     const id = setInterval(tick, 5200);
     return () => { alive = false; clearInterval(id); clearTimeout(hideT); };
-  }, [spotlightPool]);
-  // 本当の新着が来たら割り込んで表示
+  }, [spotlightPool, tab]);
   useEffect(() => {
     if (!freshId) return;
     const fs = signals.find((s) => s.id === freshId);
     if (fs) { setSpot(fs); setReact(true); }
   }, [freshId, signals]);
 
-  if (mode === "preview") {
-    return <PreviewBoard now={now} preview={preview} nav={nav} targetLabel={targetLabel} liveStartMs={liveStartMs} />;
-  }
-
   const onOpen = (id: string) => nav({ screen: "race", raceId: id });
 
   return (
     <div className="ky-board">
-      <AppHeader now={now} nav={nav} mode={mode} targetLabel={targetLabel}><Ticker signals={signals} /></AppHeader>
+      <AppHeader now={now} nav={nav} mode={mode} targetLabel={targetLabel}>
+        {tab === "signal" && mode !== "preview" ? <Ticker signals={signals} /> : null}
+      </AppHeader>
 
       <div className="ky-board-in">
-        <div className="ky-board-meta">
-          <div className="ky-counts">
-            <button className={`ky-count ${filter === "drop" ? "on" : ""}`} style={S({ "--c": "var(--drop)" })} onClick={() => setFilter("drop")}><b className="nums">{counts.drop}</b>急落</button>
-            <button className={`ky-count ${filter === "surge" ? "on" : ""}`} style={S({ "--c": "var(--surge)" })} onClick={() => setFilter("surge")}><b className="nums">{counts.surge}</b>急騰</button>
-            <button className={`ky-count ${filter === "reversal" ? "on" : ""}`} style={S({ "--c": "var(--reversal)" })} onClick={() => setFilter("reversal")}><b className="nums">{counts.reversal}</b>逆転</button>
-          </div>
-          <span className="ky-muted nums ky-updated">更新 {fmtClock(now)}</span>
+        {/* タブ: 急変 / レース一覧 */}
+        <div className="ky-tabs">
+          <button className={`ky-tab ${tab === "signal" ? "on" : ""}`} onClick={() => setTab("signal")}>
+            急変{signals.length ? `（${signals.length}）` : ""}
+          </button>
+          <button className={`ky-tab ${tab === "races" ? "on" : ""}`} onClick={() => setTab("races")}>
+            レース一覧{races.length ? `（${races.length}）` : ""}
+          </button>
         </div>
 
-        <div className="ky-filterbar">
-          <div className="ky-chips">
-            {TABS.map((t) => {
-              const active = filter === t.key;
-              const c = t.key === "all" ? "var(--brand)" : SIGNAL_META[t.key as "drop"].varc;
-              return (
-                <button key={t.key} className={`ky-chip ${active ? "on" : ""}`} onClick={() => setFilter(t.key)}
-                  style={active ? { background: c, color: "var(--chip-ink)", borderColor: c } : S({ "--c": c })}>
-                  <span className="ky-chip-arrow">{t.arrow}</span>{t.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="ky-venue-wrap">
-            <select className="ky-venue nums" value={venue} onChange={(e) => setVenue(e.target.value)}>
-              {venues.map((v) => <option key={v} value={v}>{v === "all" ? "全会場" : v}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="ky-legend">
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-high ky-ok-sm"><span className="ky-ok-val">A</span></span>実力上位</span>
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-mid ky-ok-sm"><span className="ky-ok-val">B</span></span>有力</span>
-          <span className="ky-legend-i"><span className="ky-ok ky-ok-low ky-ok-sm"><span className="ky-ok-val">C</span></span>標準</span>
-          <span className="ky-legend-sep">/</span>
-          <span className="ky-legend-i"><span className="ky-honmei">本命</span>急落×A</span>
-          <button className="ky-link ky-legend-more" onClick={() => nav({ screen: "guide" })}>くわしい使い方 →</button>
-        </div>
-
-        {shown.length === 0 ? (
-          <div className="ky-empty">
-            <Mascot size={104} mood="idle" color={MASCOT_COLOR} />
-            <div className="ky-empty-t">{filter === "drop" ? "今は急落シグナルが出ていないな。" : "シグナルがまだ無いな。"}</div>
-            <button className="ky-link" onClick={() => { setFilter("all"); setVenue("all"); }}>全部を見る</button>
-          </div>
+        {tab === "races" ? (
+          <RaceList now={now} races={races} nav={nav} mode={mode} targetLabel={targetLabel} liveStartMs={liveStartMs} />
         ) : (
-          <div className="ky-list ky-list-list">
-            {shown.map((s) => <SignalRow key={s.id} s={s} layout="list" now={now} onOpen={onOpen} fresh={s.id === freshId} />)}
-          </div>
-        )}
+          <>
+            <div className="ky-board-meta">
+              <div className="ky-counts">
+                <button className={`ky-count ${filter === "drop" ? "on" : ""}`} style={S({ "--c": "var(--drop)" })} onClick={() => setFilter("drop")}><b className="nums">{counts.drop}</b>急落</button>
+                <button className={`ky-count ${filter === "surge" ? "on" : ""}`} style={S({ "--c": "var(--surge)" })} onClick={() => setFilter("surge")}><b className="nums">{counts.surge}</b>急騰</button>
+                <button className={`ky-count ${filter === "reversal" ? "on" : ""}`} style={S({ "--c": "var(--reversal)" })} onClick={() => setFilter("reversal")}><b className="nums">{counts.reversal}</b>逆転</button>
+              </div>
+              <span className="ky-muted nums ky-updated">更新 {fmtClock(now)}</span>
+            </div>
 
-        <p className="ky-fineprint">指数(A/B/C)=オッズくん指数＝馬の実力評価(A=上位/B=有力/C=標準)。<b style={{ color: "var(--cta)" }}>★本命</b>=急落×A＝資金と実力が一致したサイン。※情報ツールであり的中・利益を保証するものではありません。</p>
+            <div className="ky-filterbar">
+              <div className="ky-chips">
+                {TABS.map((t) => {
+                  const active = filter === t.key;
+                  const c = t.key === "all" ? "var(--brand)" : SIGNAL_META[t.key as "drop"].varc;
+                  return (
+                    <button key={t.key} className={`ky-chip ${active ? "on" : ""}`} onClick={() => setFilter(t.key)}
+                      style={active ? { background: c, color: "var(--chip-ink)", borderColor: c } : S({ "--c": c })}>
+                      <span className="ky-chip-arrow">{t.arrow}</span>{t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="ky-venue-wrap">
+                <select className="ky-venue nums" value={venue} onChange={(e) => setVenue(e.target.value)}>
+                  {venues.map((v) => <option key={v} value={v}>{v === "all" ? "全会場" : v}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="ky-legend">
+              <span className="ky-legend-i"><span className="ky-ok ky-ok-high ky-ok-sm"><span className="ky-ok-val">A</span></span>実力上位</span>
+              <span className="ky-legend-i"><span className="ky-ok ky-ok-mid ky-ok-sm"><span className="ky-ok-val">B</span></span>有力</span>
+              <span className="ky-legend-i"><span className="ky-ok ky-ok-low ky-ok-sm"><span className="ky-ok-val">C</span></span>標準</span>
+              <span className="ky-legend-sep">/</span>
+              <span className="ky-legend-i"><span className="ky-honmei">本命</span>急落×A</span>
+              <button className="ky-link ky-legend-more" onClick={() => nav({ screen: "guide" })}>くわしい使い方 →</button>
+            </div>
+
+            {shown.length === 0 ? (
+              <div className="ky-empty">
+                <Mascot size={104} mood="idle" color={MASCOT_COLOR} />
+                <div className="ky-empty-t">{mode === "preview" ? "急変は監視開始後に出ます。" : (filter === "drop" ? "今は急落シグナルが出ていないな。" : "シグナルがまだ無いな。")}</div>
+                <button className="ky-link" onClick={() => setTab("races")}>レース一覧から探す →</button>
+              </div>
+            ) : (
+              <div className="ky-list ky-list-list">
+                {shown.map((s) => <SignalRow key={s.id} s={s} layout="list" now={now} onOpen={onOpen} fresh={s.id === freshId} />)}
+              </div>
+            )}
+
+            <p className="ky-fineprint">指数(A/B/C)=オッズくん指数＝馬の実力評価(A=上位/B=有力/C=標準)。<b style={{ color: "var(--cta)" }}>★本命</b>=急落×A＝資金と実力が一致したサイン。※情報ツールであり的中・利益を保証するものではありません。</p>
+          </>
+        )}
       </div>
 
-      <div className={`ky-watcher ${react ? "is-react" : ""}`} style={S({ "--ms": MASCOT_SCALE })}>
-        {react && spot && (
-          <div className="ky-watcher-bubble">
-            <b style={{ color: SIGNAL_META[spot.type].varc }}>{SIGNAL_META[spot.type].arrow}{SIGNAL_META[spot.type].label}</b>みっけ！<br />
-            <span className="nums">{spot.venue}{spot.raceNumber}R {spot.horseNumber}番</span>
-            <span className="nums" style={{ color: SIGNAL_META[spot.type].varc, marginLeft: 6 }}>{fmtPct(spot.changePct)}</span>
-          </div>
-        )}
-        <Mascot size={64 * MASCOT_SCALE} mood={react ? "alert" : "idle"} color={MASCOT_COLOR} glow={false} />
-      </div>
+      {tab === "signal" && (
+        <div className={`ky-watcher ${react ? "is-react" : ""}`} style={S({ "--ms": MASCOT_SCALE })}>
+          {react && spot && (
+            <div className="ky-watcher-bubble">
+              <b style={{ color: SIGNAL_META[spot.type].varc }}>{SIGNAL_META[spot.type].arrow}{SIGNAL_META[spot.type].label}</b>みっけ！<br />
+              <span className="nums">{spot.venue}{spot.raceNumber}R {spot.horseNumber}番</span>
+              <span className="nums" style={{ color: SIGNAL_META[spot.type].varc, marginLeft: 6 }}>{fmtPct(spot.changePct)}</span>
+            </div>
+          )}
+          <Mascot size={64 * MASCOT_SCALE} mood={react ? "alert" : "idle"} color={MASCOT_COLOR} glow={false} />
+        </div>
+      )}
     </div>
   );
 }

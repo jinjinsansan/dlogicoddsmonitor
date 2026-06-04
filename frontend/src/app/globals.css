@@ -301,6 +301,22 @@ b { font-weight: 700; }
 .ky-prace-num { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; border:1px solid var(--line); border-radius:6px; font-size:12px; font-weight:700; flex-shrink:0; }
 .ky-prace-name { flex:1; min-width:0; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ky-prace-foot { font-size:11px; border-top:1px solid var(--line); padding-top:6px; }
+.ky-prace { cursor:pointer; position:relative; }
+.ky-prace.is-honmei { border-color:color-mix(in srgb, var(--cta) 55%, var(--line)); box-shadow:0 0 0 1px color-mix(in srgb, var(--cta) 30%, transparent), 0 6px 20px -12px var(--cta); }
+.ky-prace-badges { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.ky-pb { font-size:12.5px; font-weight:700; }
+.ky-prace-track { display:inline-flex; align-items:center; justify-content:center; gap:5px; margin-top:2px; padding:7px 10px; border-radius:9px; font-size:12.5px; font-weight:700; background:var(--surface-2); border:1px solid var(--line); color:var(--ink); transition:background .15s, border-color .15s; }
+.ky-prace-track svg { color:var(--drop); }
+.ky-prace-track:hover { border-color:color-mix(in srgb, var(--drop) 50%, var(--line)); }
+.ky-prace-track:disabled { opacity:.6; }
+.ky-prace-track.is-on { background:var(--drop); color:var(--chip-ink); border-color:var(--drop); }
+.ky-prace-track.is-on svg { color:var(--chip-ink); }
+
+/* ============ ボードのタブ(急変/レース一覧) ============ */
+.ky-tabs { display:flex; gap:6px; margin:6px 0 12px; border-bottom:1px solid var(--line); }
+.ky-tab { padding:9px 16px; font-size:15px; font-weight:700; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s, border-color .15s; }
+.ky-tab:hover { color:var(--ink); }
+.ky-tab.on { color:var(--ink); border-bottom-color:var(--drop); }
 
 /* ============ 使い方 ============ */
 .ky-guide { }
