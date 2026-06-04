@@ -415,13 +415,13 @@ export function BoardScreen({ now, board, nav, freshId }: { now: number; board: 
       </AppHeader>
 
       <div className="ky-board-in">
-        {/* タブ: 急変 / レース一覧 */}
+        {/* タブ: レース一覧(左・既定) / 急変(右) */}
         <div className="ky-tabs">
-          <button className={`ky-tab ${tab === "signal" ? "on" : ""}`} onClick={() => setTab("signal")}>
-            急変{signals.length ? `（${signals.length}）` : ""}
-          </button>
           <button className={`ky-tab ${tab === "races" ? "on" : ""}`} onClick={() => setTab("races")}>
             レース一覧{races.length ? `（${races.length}）` : ""}
+          </button>
+          <button className={`ky-tab ${tab === "signal" ? "on" : ""}`} onClick={() => setTab("signal")}>
+            急変{signals.length ? `（${signals.length}）` : ""}
           </button>
         </div>
 
