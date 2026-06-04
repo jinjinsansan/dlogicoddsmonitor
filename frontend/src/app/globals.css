@@ -323,6 +323,10 @@ b { font-weight: 700; }
 .ky-guide-honmei-eq { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
 .ky-guide-plus { font-size:18px; font-weight:800; color:var(--muted); }
 .ky-guide-cta { display:flex; justify-content:center; margin-top:30px; }
+.ky-guide-notes { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.ky-guide-notes li { position:relative; padding-left:20px; font-size:13.5px; color:var(--muted); line-height:1.6; }
+.ky-guide-notes li::before { content:"・"; position:absolute; left:2px; top:0; color:var(--drop); font-weight:800; }
+.ky-guide-notes b { color:var(--ink); }
 
 @media (min-width: 720px) {
   .ky-guide-cards { grid-template-columns:repeat(3,1fr); }

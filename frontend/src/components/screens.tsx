@@ -700,6 +700,37 @@ export function GuideScreen({ now, nav }: { now: number; nav: Nav }) {
           </div>
         </section>
 
+        {/* 通知(追跡) */}
+        <section className="ky-guide-sec">
+          <h2 className="ky-section-t">⑤ 直前の通知（追跡）の使い方</h2>
+          <Bubble>
+            気になるレースを<b style={{ color: "var(--ink)" }}>「追跡」</b>しておくと、<b style={{ color: "var(--drop)" }}>発走の約4分前</b>に「<b>直前で最も急落した馬</b>（＝最も買われた馬）」を、ぼくが<b>無料で通知</b>するよ。LINE登録は要らないよ。
+          </Bubble>
+          <div className="ky-how-steps" style={{ marginTop: 12 }}>
+            {([
+              ["レースを開く", "ボードから気になるレースをタップ。"],
+              ["🔔 追跡を押す", "「このレースを追跡」→ 通知を「許可」。"],
+              ["直前に通知が届く", "発走4分前に最も急落した馬をお知らせ。"],
+            ] as [string, string][]).map(([t, d], i) => (
+              <div className="ky-how-step" key={i}>
+                <span className="ky-how-num nums">{i + 1}</span>
+                <div><div className="ky-how-t">{t}</div><div className="ky-how-d">{d}</div></div>
+              </div>
+            ))}
+          </div>
+          <div className="ky-guide-card" style={{ marginTop: 14 }}>
+            <div className="ky-bento-k" style={{ fontSize: 15, marginBottom: 8 }}>つかうときのポイント</div>
+            <ul className="ky-guide-notes">
+              <li><b>無料</b>・何レースでも追跡OK。やめたい時はもう一度「追跡中」を押せば解除。</li>
+              <li>スマホ・PCの<b>ブラウザ通知</b>（OSの通知）として届きます。アプリ不要。</li>
+              <li><b>iPhone(Safari)</b>は、共有メニューから<b>「ホーム画面に追加」</b>→そのアイコンから開くと通知が使えます（Apple側の仕様）。</li>
+              <li><b>Android／PCのChrome等</b>はそのまま使えます。</li>
+              <li>通知が来ない時は、ブラウザ／端末の通知設定で「許可」になっているか確認してください。</li>
+            </ul>
+          </div>
+          <p className="ky-fineprint" style={{ marginTop: 12 }}>※「最も急落した馬」は資金の動きを示す情報です。的中・利益を保証するものではありません。</p>
+        </section>
+
         <div className="ky-guide-cta">
           <button className="ky-btn ky-btn-cta" onClick={() => nav({ screen: "board" })}>急変ボードを見る →</button>
         </div>
