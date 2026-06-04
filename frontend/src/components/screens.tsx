@@ -64,7 +64,10 @@ function makeQR(seed: number, n: number) {
 // LINE友だち追加URL(未設定ならデモ用 # )
 const LINE_ADD_URL = process.env.NEXT_PUBLIC_LINE_ADD_URL || "";
 
-function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => void; onEnter: () => void }) {
+// LINE登録ゲート(必須・スキップ不可)。onRegistered で「中を見る」=登録完了。
+// forced=true(直リンクでブロック中)のときは × で閉じてもLPに戻るだけ。
+export function LineGate({ open, forced, onClose, onRegistered }:
+  { open: boolean; forced?: boolean; onClose: () => void; onRegistered: () => void }) {
   const [done, setDone] = useState(false);
   useEffect(() => { if (!open) setDone(false); }, [open]);
   const N = 21;
@@ -81,13 +84,13 @@ function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => vo
             <Mascot size={96} mood="happy" color={MASCOT_COLOR} idle glow />
             <h3 className="ky-gate-title">友だち追加、ありがとう！</h3>
             <p className="ky-gate-sub">さっそく今の相場を見てみよう。急変ボードはぜんぶ無料で見放題だよ。</p>
-            <button className="ky-btn ky-btn-cta ky-gate-go" onClick={onEnter}>ボードを見る →</button>
+            <button className="ky-btn ky-btn-cta ky-gate-go" onClick={onRegistered}>中を見る →</button>
           </div>
         ) : (
           <>
             <div className="ky-gate-mascot"><Mascot size={78} mood="happy" color={MASCOT_COLOR} idle glow={false} /></div>
             <h3 className="ky-gate-title">LINEで友だち追加して<br /><span className="ky-gate-free">無料で見放題</span></h3>
-            <p className="ky-gate-sub">全レースのオッズ急変ボードが、ぜんぶ無料で見放題。LINEで友だち追加するだけ・10秒。</p>
+            <p className="ky-gate-sub">急変ボード・オッズくん指数・本命急落のすべてを見るには、LINEの友だち追加が必要です（無料・10秒）。</p>
             <button className="ky-line-btn" onClick={addFriend}>
               <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C6.9 3 2.75 6.35 2.75 10.5c0 3.72 3.3 6.84 7.78 7.43.3.06.71.2.81.45.09.23.06.59.03.82l-.13.79c-.04.23-.18.91.8.5 .98-.42 5.3-3.12 7.23-5.34 1.33-1.46 1.97-2.95 1.97-4.65C21.25 6.35 17.1 3 12 3Z" /><rect x="6.4" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /><rect x="15.6" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /></svg>
               LINEで友だち追加（無料）
@@ -104,7 +107,7 @@ function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => vo
               <li>オッズくん指数・本命急落もぜんぶ無料</li>
               <li>いつでも解除OK</li>
             </ul>
-            <button className="ky-gate-skip" onClick={onEnter}>デモ：登録せずに中を見る</button>
+            <button className="ky-gate-skip" onClick={onClose}>{forced ? "トップに戻る" : "あとで"}</button>
             <p className="ky-gate-fine">情報提供サービスであり、的中・利益を保証するものではありません。</p>
           </>
         )}
@@ -132,9 +135,8 @@ export function LandingScreen({ now, board, nav }: { now: number; board: BoardPa
     }
     return out.sort((a, b) => (b.h.okScore ?? 0) - (a.h.okScore ?? 0)).slice(0, 4);
   }, [preview]);
-  const [gate, setGate] = useState(false);
-  const openGate = () => setGate(true);
-  const enterBoard = () => { setGate(false); nav({ screen: "board" }); };
+  // 「中を見る」系は guarded nav に委ねる(未登録ならKyApp側でゲートが開く)
+  const openGate = () => nav({ screen: "board" });
   const counts = useMemo(() => ({
     drop: signals.filter((s) => s.type === "drop").length,
     surge: signals.filter((s) => s.type === "surge").length,
@@ -247,8 +249,6 @@ export function LandingScreen({ now, board, nav }: { now: number; board: BoardPa
       </section>
 
       <footer className="ky-footer">急騰急落オッズくん β — JRAオッズ急変の可視化</footer>
-
-      <LineGate open={gate} onClose={() => setGate(false)} onEnter={enterBoard} />
     </div>
   );
 }
@@ -704,7 +704,7 @@ export function GuideScreen({ now, nav }: { now: number; nav: Nav }) {
         <section className="ky-guide-sec">
           <h2 className="ky-section-t">⑤ 直前の通知（追跡）の使い方</h2>
           <Bubble>
-            気になるレースを<b style={{ color: "var(--ink)" }}>「追跡」</b>しておくと、<b style={{ color: "var(--drop)" }}>発走の約4分前</b>に「<b>直前で最も急落した馬</b>（＝最も買われた馬）」を、ぼくが<b>無料で通知</b>するよ。LINE登録は要らないよ。
+            気になるレースを<b style={{ color: "var(--ink)" }}>「追跡」</b>しておくと、<b style={{ color: "var(--drop)" }}>発走の約4分前</b>に「<b>直前で最も急落した馬</b>（＝最も買われた馬）」を<b>無料で通知</b>するよ。通知はLINEじゃなく<b>ブラウザ</b>に届くよ（アプリ不要）。
           </Bubble>
           <div className="ky-how-steps" style={{ marginTop: 12 }}>
             {([
