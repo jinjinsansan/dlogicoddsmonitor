@@ -12,6 +12,21 @@ export function pushSupported(): boolean {
     "Notification" in window;
 }
 
+export function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iphone|ipad|ipod/i.test(ua) ||
+    (navigator.platform === "MacIntel" && (navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints! > 1);
+}
+
+// 通知ボタン押下時の非対応メッセージ(iOSは個別案内)
+export function unsupportedMessage(): string {
+  if (isIOS()) {
+    return "iPhoneで通知を受け取るには、Safariでこのサイトを開き、共有ボタン→「ホーム画面に追加」してください。追加したアイコンから開くと通知が使えます（Chrome等では通知できません）。";
+  }
+  return "このブラウザは通知に対応していません。最新のChrome/Edge/Safari等でお試しください。";
+}
+
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");

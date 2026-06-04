@@ -7,7 +7,7 @@ import {
   type Sig, type Race, type RaceCard, type PreviewHorse,
 } from "./ui";
 import type { BoardPayload } from "@/lib/static";
-import { pushSupported, isTracked, trackRace, untrackRace } from "@/lib/push";
+import { pushSupported, isTracked, trackRace, untrackRace, unsupportedMessage } from "@/lib/push";
 
 const MASCOT_COLOR = "#00E5FF"; // neon drop
 const MASCOT_SCALE = 1.28; // big
@@ -273,11 +273,11 @@ function fmtCountdown(ms: number) {
 function RaceCardItem({ card, nav, now }: { card: RaceCard; nav: Nav; now: number }) {
   const [tracked, setTrackedState] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [supported, setSupported] = useState(false);
-  useEffect(() => { setSupported(pushSupported()); setTrackedState(isTracked(card.raceId)); }, [card.raceId]);
+  useEffect(() => { setTrackedState(isTracked(card.raceId)); }, [card.raceId]);
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (busy) return;
+    if (!pushSupported()) { alert(unsupportedMessage()); return; }
     setBusy(true);
     try {
       if (tracked) { await untrackRace(card.raceId); setTrackedState(false); }
@@ -285,7 +285,7 @@ function RaceCardItem({ card, nav, now }: { card: RaceCard; nav: Nav; now: numbe
     } catch (err) {
       const msg = (err as Error)?.message;
       if (msg === "denied") alert("通知がブロックされています。ブラウザの設定で通知を許可してください。");
-      else if (msg === "unsupported") alert("このブラウザは通知に対応していません。");
+      else if (msg === "unsupported") alert(unsupportedMessage());
       else alert("追跡の登録に失敗しました。");
     } finally { setBusy(false); }
   };
@@ -314,12 +314,10 @@ function RaceCardItem({ card, nav, now }: { card: RaceCard; nav: Nav; now: numbe
           </div>
         ))}
       </div>
-      {supported && (
-        <button className={`ky-prace-track ${tracked ? "is-on" : ""}`} onClick={toggle} disabled={busy} aria-label="このレースを追跡">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-          {tracked ? "追跡中" : "追跡"}
-        </button>
-      )}
+      <button className={`ky-prace-track ${tracked ? "is-on" : ""}`} onClick={toggle} disabled={busy} aria-label="このレースを追跡">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+        {tracked ? "追跡中" : "追跡"}
+      </button>
     </div>
   );
 }
@@ -363,7 +361,7 @@ function RaceList({ now, races, nav, mode, targetLabel, liveStartMs }:
 
 export function BoardScreen({ now, board, nav, freshId }: { now: number; board: BoardPayload; nav: Nav; freshId: string | number | null }) {
   const { signals, mode, races, targetLabel, liveStartMs } = board;
-  const [tab, setTab] = useState<"signal" | "races">(mode === "preview" ? "races" : "signal");
+  const [tab, setTab] = useState<"signal" | "races">("races"); // 既定=レース一覧
   const [filter, setFilter] = useState<string>("drop");
   const [venue, setVenue] = useState("all");
   const venues = ["all", ...useMemo(() => activeVenues(signals), [signals])];
@@ -508,7 +506,6 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [tracked, setTracked] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [supported, setSupported] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -521,12 +518,12 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
   }, [raceId]);
 
   useEffect(() => {
-    setSupported(pushSupported());
     setTracked(isTracked(raceId));
   }, [raceId]);
 
   const toggleTrack = async () => {
     if (busy) return;
+    if (!pushSupported()) { alert(unsupportedMessage()); return; }
     setBusy(true);
     try {
       if (tracked) { await untrackRace(raceId); setTracked(false); }
@@ -534,7 +531,7 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
     } catch (e) {
       const msg = (e as Error)?.message;
       if (msg === "denied") alert("通知がブロックされています。ブラウザの設定で通知を許可してください。");
-      else if (msg === "unsupported") alert("このブラウザは通知に対応していません。");
+      else if (msg === "unsupported") alert(unsupportedMessage());
       else alert("追跡の登録に失敗しました。少し時間をおいて再度お試しください。");
     } finally {
       setBusy(false);
@@ -577,14 +574,12 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
           {(race.raceName || race.distance) ? (
             <div className="ky-race-meta nums">{[race.raceName, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.nHorses ? `${race.nHorses}頭` : ""].filter(Boolean).join(" · ")}</div>
           ) : null}
-          {supported && (
-            <button className={`ky-track ${tracked ? "is-on" : ""}`} onClick={toggleTrack} disabled={busy}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {tracked ? "追跡中・直前に通知" : "このレースを追跡"}
-            </button>
-          )}
+          <button className={`ky-track ${tracked ? "is-on" : ""}`} onClick={toggleTrack} disabled={busy}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {tracked ? "追跡中・直前に通知" : "このレースを追跡"}
+          </button>
         </div>
 
         <div className="ky-glass ky-chart-card">
