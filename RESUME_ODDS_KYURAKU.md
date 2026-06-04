@@ -4,7 +4,15 @@
 > 状態・決定事項・検証結果・次の一手が全部ここにある。作成: 2026-06-04。
 
 ## いまの状態(一行)
-**設計完了・実装未着手。** 次は「データ取得方式(A推奨)を決めて MVP実装(Next.js LP + /board + /race/[id])に着手」。
+**MVP実装完了・ローカル稼働確認済(2026-06-04)。** 次は「ブラウザで確認→フィードバック反映→Vercelデプロイ(kyuraku.dlogicai.in)」。
+
+### MVP実装メモ
+- 場所: `frontend/`(Next.js14 App Router + Tailwind + Recharts)。`npm run dev` で http://localhost:3000。
+- データ方式 = **A改良: サーバー側でSupabase直読み(service_roleキー、`frontend/.env.local`、クライアント露出なし)**。RLS不要。
+- 実装: `/`(LP)・`/board`(種別フィルタ/45秒ポーリング/**JRA限定**・既定=急落)・`/race/[id]`(オッズ推移Recharts+急変履歴)・`/api/board`。
+- 検証済: build OK / 実データ表示OK(`fetchBoard` はJRA会場のみ。NAR除外)。
+- 既知の簡易点(今後): 馬番表示のみ(馬名は signal_entries 等から付与可)、発走時刻未表示、Vercel未デプロイ。
+- env: Vercelに `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`(agkuvhiycthrloxzhgjc)を設定する。
 
 ---
 
