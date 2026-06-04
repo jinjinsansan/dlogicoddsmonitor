@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LandingScreen, BoardScreen, RaceScreen, type Route } from "./screens";
+import { LandingScreen, BoardScreen, RaceScreen, GuideScreen, type Route } from "./screens";
 import type { Sig } from "./ui";
 
 export default function KyApp({ initialSignals, initialRoute, nowInit }:
@@ -45,8 +45,9 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
     if (sc) sc.scrollTop = 0;
     try {
       const u = r.screen === "board" ? "/board"
-        : r.screen === "race" && r.raceId ? `/race/${encodeURIComponent(r.raceId)}`
-          : "/";
+        : r.screen === "guide" ? "/guide"
+          : r.screen === "race" && r.raceId ? `/race/${encodeURIComponent(r.raceId)}`
+            : "/";
       window.history.pushState({}, "", u);
     } catch { /* noop */ }
   }, []);
@@ -57,6 +58,7 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
       const p = location.pathname;
       if (p.startsWith("/race/")) setRoute({ screen: "race", raceId: decodeURIComponent(p.slice("/race/".length)) });
       else if (p.startsWith("/board")) setRoute({ screen: "board" });
+      else if (p.startsWith("/guide")) setRoute({ screen: "guide" });
       else setRoute({ screen: "lp" });
     };
     window.addEventListener("popstate", onPop);
@@ -66,6 +68,7 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
   let screen: React.ReactNode;
   if (route.screen === "board") screen = <BoardScreen now={now} signals={signals} nav={nav} freshId={freshId} />;
   else if (route.screen === "race" && route.raceId) screen = <RaceScreen now={now} raceId={route.raceId} nav={nav} />;
+  else if (route.screen === "guide") screen = <GuideScreen now={now} nav={nav} />;
   else screen = <LandingScreen now={now} signals={signals} nav={nav} />;
 
   return (

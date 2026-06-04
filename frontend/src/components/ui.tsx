@@ -163,20 +163,25 @@ export function GradeChip({ grade }: { grade: string }) {
   return <span className="ky-grade" style={{ background: isG ? "var(--cta)" : "var(--surface-2)", color: isG ? "#0A0E17" : "var(--muted)", borderColor: isG ? "transparent" : "var(--line)" }}>{grade}</span>;
 }
 
-// --- オッズくん指数(中身はエンジン評価。ブランド名は出さない=独自の注目度の参考値) ---
+// --- オッズくん指数(中身はエンジン評価。ブランド名は出さない=馬の実力評価) ---
+// A=実力上位(80+) / B=有力(70-79) / C=標準(<70)
 export function okTier(score: number | null | undefined): "high" | "mid" | "low" | null {
   if (score == null) return null;
   if (score >= 80) return "high";
   if (score >= 70) return "mid";
   return "low";
 }
+export function okGrade(score: number | null | undefined): "A" | "B" | "C" | null {
+  const t = okTier(score);
+  return t === "high" ? "A" : t === "mid" ? "B" : t === "low" ? "C" : null;
+}
 export function OkScore({ score, size = "md" }: { score: number | null | undefined; size?: "sm" | "md" }) {
+  const g = okGrade(score);
   const tier = okTier(score);
-  if (tier == null || score == null) return null;
+  if (g == null || tier == null) return null;
   return (
-    <span className={`ky-ok ky-ok-${tier} ${size === "sm" ? "ky-ok-sm" : ""}`} title="オッズくん指数（独自の注目度の参考値）">
-      <span className="ky-ok-cap">指数</span>
-      <span className="nums ky-ok-val">{Math.round(score)}</span>
+    <span className={`ky-ok ky-ok-${tier} ${size === "sm" ? "ky-ok-sm" : ""}`} title="オッズくん指数：馬の実力評価（A=上位 / B=有力 / C=標準）">
+      <span className="ky-ok-val">{g}</span>
     </span>
   );
 }

@@ -11,7 +11,7 @@ const MASCOT_COLOR = "#00E5FF"; // neon drop
 const MASCOT_SCALE = 1.28; // big
 const S = (o: Record<string, unknown>) => o as React.CSSProperties;
 
-export type Route = { screen: "lp" | "board" | "race"; raceId?: string };
+export type Route = { screen: "lp" | "board" | "race" | "guide"; raceId?: string };
 type Nav = (r: Route) => void;
 
 // ============ ヘッダ ============
@@ -24,6 +24,7 @@ function AppHeader({ now, nav, children }: { now: number; nav: Nav; children?: R
           <span className="ky-wordmark"><span style={{ color: "var(--surge)" }}>急騰</span><span style={{ color: "var(--drop)" }}>急落</span>オッズくん</span>
         </button>
         <div className="ky-appbar-r">
+          <button className="ky-link" onClick={() => nav({ screen: "guide" })}>使い方</button>
           <span className="nums ky-clock">{fmtClock(now)}</span>
           <LiveDot />
         </div>
@@ -131,6 +132,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
           <span className="ky-wordmark"><span style={{ color: "var(--surge)" }}>急騰</span><span style={{ color: "var(--drop)" }}>急落</span>オッズくん</span>
         </div>
         <div className="ky-lp-nav-r">
+          <button className="ky-link" onClick={() => nav({ screen: "guide" })}>使い方</button>
           <button className="ky-link" onClick={openGate}>ボード</button>
           <span className="ky-beta">β版 · 無料</span>
         </div>
@@ -283,6 +285,15 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
           </div>
         </div>
 
+        <div className="ky-legend">
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-high ky-ok-sm"><span className="ky-ok-val">A</span></span>実力上位</span>
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-mid ky-ok-sm"><span className="ky-ok-val">B</span></span>有力</span>
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-low ky-ok-sm"><span className="ky-ok-val">C</span></span>標準</span>
+          <span className="ky-legend-sep">/</span>
+          <span className="ky-legend-i"><span className="ky-honmei">本命</span>急落×A</span>
+          <button className="ky-link ky-legend-more" onClick={() => nav({ screen: "guide" })}>くわしい使い方 →</button>
+        </div>
+
         {shown.length === 0 ? (
           <div className="ky-empty">
             <Mascot size={104} mood="idle" color={MASCOT_COLOR} />
@@ -295,7 +306,7 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
           </div>
         )}
 
-        <p className="ky-fineprint"><b style={{ color: "var(--cta)" }}>指数</b>=オッズくん指数(出走馬の独自の注目度・参考値)。<b style={{ color: "var(--cta)" }}>★本命</b>=急落かつ指数80以上＝資金と実力が一致したサイン。※情報ツールであり的中・利益を保証するものではありません。</p>
+        <p className="ky-fineprint">指数(A/B/C)=オッズくん指数＝馬の実力評価(A=上位/B=有力/C=標準)。<b style={{ color: "var(--cta)" }}>★本命</b>=急落×A＝資金と実力が一致したサイン。※情報ツールであり的中・利益を保証するものではありません。</p>
       </div>
 
       <div className={`ky-watcher ${react ? "is-react" : ""}`} style={S({ "--ms": MASCOT_SCALE })}>
@@ -412,9 +423,111 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
             );
           })}
         </div>
-        <p className="ky-fineprint" style={{ marginTop: 10 }}>「オッズくん指数」は出走馬の独自の注目度（0–100の参考値）。<b style={{ color: "var(--cta)" }}>本命急落</b>＝急落かつ指数80以上＝資金と実力が一致したサイン。的中・利益を保証するものではありません。</p>
+        <p className="ky-fineprint" style={{ marginTop: 10 }}>「指数」＝オッズくん指数＝馬の実力評価（<b>A</b>=上位/<b>B</b>=有力/<b>C</b>=標準）。<b style={{ color: "var(--cta)" }}>本命急落</b>＝急落×A＝資金と実力が一致したサイン。的中・利益を保証するものではありません。</p>
 
         <p className="ky-fineprint">※ オッズの動きを可視化する情報ツールです。的中・利益を保証するものではありません。</p>
+      </div>
+    </div>
+  );
+}
+
+// ============ 使い方(オッズくんが解説) ============
+function Bubble({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="ky-guide-row">
+      <div className="ky-guide-mini"><Mascot size={56} mood="happy" color={MASCOT_COLOR} idle glow={false} /></div>
+      <div className="ky-guide-bubble">{children}</div>
+    </div>
+  );
+}
+
+export function GuideScreen({ now, nav }: { now: number; nav: Nav }) {
+  return (
+    <div className="ky-guide">
+      <AppHeader now={now} nav={nav} />
+      <div className="ky-board-in">
+        <button className="ky-back" onClick={() => nav({ screen: "lp" })}>← トップに戻る</button>
+
+        <div className="ky-guide-hero">
+          <Mascot size={120} mood="idle" color={MASCOT_COLOR} />
+          <h1 className="ky-h2" style={{ marginTop: 10, marginBottom: 6 }}>オッズくんの使い方</h1>
+          <p className="ky-muted" style={{ fontSize: 14, maxWidth: 520, lineHeight: 1.7 }}>
+            こんにちは、オッズくんだよ。<br />ぼくは<b style={{ color: "var(--ink)" }}>JRA全レースのオッズ</b>をずっと見張って、「いま動いた馬」を教えるよ。1分で使い方を説明するね！
+          </p>
+        </div>
+
+        {/* 急変の3種類 */}
+        <section className="ky-guide-sec">
+          <h2 className="ky-section-t">① 「急変」＝お金の動き</h2>
+          <Bubble>
+            オッズが急に動くのは<b style={{ color: "var(--ink)" }}>みんなのお金が動いた</b>サイン。ぼくは3種類を見つけるよ。
+          </Bubble>
+          <div className="ky-guide-cards">
+            <div className="ky-guide-card" style={S({ "--accent": "var(--drop)" })}>
+              <div className="ky-guide-card-h"><TypeBadge type="drop" /></div>
+              <div className="ky-guide-card-d"><b style={{ color: "var(--drop)" }}>オッズが下がった</b>＝お金が入ってきた＝<b>買われている</b>馬。いちばん注目！</div>
+            </div>
+            <div className="ky-guide-card" style={S({ "--accent": "var(--surge)" })}>
+              <div className="ky-guide-card-h"><TypeBadge type="surge" /></div>
+              <div className="ky-guide-card-d"><b style={{ color: "var(--surge)" }}>オッズが上がった</b>＝お金が抜けた＝<b>人気が離れた</b>馬。</div>
+            </div>
+            <div className="ky-guide-card" style={S({ "--accent": "var(--reversal)" })}>
+              <div className="ky-guide-card-h"><TypeBadge type="reversal" /></div>
+              <div className="ky-guide-card-d"><b style={{ color: "var(--reversal)" }}>1番人気が入れ替わった</b>瞬間。情勢が動いたサイン。</div>
+            </div>
+          </div>
+        </section>
+
+        {/* 指数 */}
+        <section className="ky-guide-sec">
+          <h2 className="ky-section-t">② 「指数」＝馬の実力評価</h2>
+          <Bubble>
+            お金が動いても、<b style={{ color: "var(--ink)" }}>その馬が本当に強いか</b>は別の話。そこでぼくは過去の成績から実力を評価して、<b>A・B・C</b>で出すよ。
+          </Bubble>
+          <div className="ky-guide-grades">
+            <div className="ky-guide-grade"><span className="ky-ok ky-ok-high"><span className="ky-ok-val">A</span></span><span><b>実力上位</b>（一線級・指数80以上）</span></div>
+            <div className="ky-guide-grade"><span className="ky-ok ky-ok-mid"><span className="ky-ok-val">B</span></span><span><b>有力</b>（指数70〜79）</span></div>
+            <div className="ky-guide-grade"><span className="ky-ok ky-ok-low"><span className="ky-ok-val">C</span></span><span><b>標準</b>（指数70未満）</span></div>
+          </div>
+        </section>
+
+        {/* 本命急落 */}
+        <section className="ky-guide-sec">
+          <h2 className="ky-section-t">③ ★本命急落 ＝ いちばん大事</h2>
+          <div className="ky-guide-honmei">
+            <div className="ky-guide-honmei-eq">
+              <span><span className="ky-badge" style={{ color: "var(--drop)", background: "color-mix(in srgb, var(--drop) 15%, transparent)", borderColor: "color-mix(in srgb, var(--drop) 40%, transparent)", padding: "3px 10px" }}>▼急落</span></span>
+              <span className="ky-guide-plus">＋</span>
+              <span><span className="ky-ok ky-ok-high"><span className="ky-ok-val">A</span></span></span>
+              <span className="ky-guide-plus">＝</span>
+              <span><span className="ky-honmei">本命</span></span>
+            </div>
+            <Bubble>
+              <b style={{ color: "var(--cta)" }}>お金が入った（急落）×実力もある（A）</b>＝買われるべくして買われている馬。これが「本命急落」、ぼくの<b>イチオシのサイン</b>だよ！ボードでは光って目立つよ。
+            </Bubble>
+          </div>
+        </section>
+
+        {/* 使い方ステップ */}
+        <section className="ky-guide-sec">
+          <h2 className="ky-section-t">④ 使い方は3ステップ</h2>
+          <div className="ky-how-steps" style={{ marginTop: 12 }}>
+            {([["ボードを開く", "今日の急変が新しい順に並ぶよ。"], ["★本命や指数Aを探す", "お金と実力が一致した馬に注目。"], ["レース詳細で確認", "オッズの推移グラフと出馬表が見れるよ。"]] as [string, string][]).map(([t, d], i) => (
+              <div className="ky-how-step" key={i}>
+                <span className="ky-how-num nums">{i + 1}</span>
+                <div><div className="ky-how-t">{t}</div><div className="ky-how-d">{d}</div></div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="ky-guide-cta">
+          <button className="ky-btn ky-btn-cta" onClick={() => nav({ screen: "board" })}>急変ボードを見る →</button>
+        </div>
+
+        <p className="ky-disclaimer" style={{ marginTop: 24 }}>
+          ※ オッズくんは「オッズの動き」と「実力評価」を見やすくする<b style={{ color: "var(--ink)" }}>情報ツール</b>です。馬券の的中・利益を保証するものではありません。馬券の購入は自己責任でお願いします。
+        </p>
       </div>
     </div>
   );

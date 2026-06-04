@@ -85,9 +85,9 @@ b { font-weight: 700; }
 .ky-tick-sep { color:var(--line); margin-left:7px; }
 
 /* ============ オッズくん指数 / 本命急落 ============ */
-.ky-ok { display:inline-flex; align-items:center; gap:3px; padding:1px 6px 1px 5px; border-radius:7px; border:1px solid; line-height:1; white-space:nowrap; flex-shrink:0; }
-.ky-ok-cap { font-size:9px; font-weight:700; opacity:.85; }
-.ky-ok-val { font-size:13px; font-weight:700; }
+.ky-ok { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 6px; border-radius:6px; border:1px solid; line-height:1; flex-shrink:0; }
+.ky-ok-val { font-size:13px; font-weight:800; letter-spacing:.02em; }
+.ky-ok-sm { min-width:20px; height:18px; }
 .ky-ok-sm .ky-ok-val { font-size:12px; }
 .ky-ok-high { color:var(--cta); border-color:color-mix(in srgb, var(--cta) 55%, transparent); background:color-mix(in srgb, var(--cta) 14%, transparent); }
 .ky-ok-mid  { color:var(--ink); border-color:var(--line); background:var(--surface-2); }
@@ -263,6 +263,38 @@ b { font-weight: 700; }
 @keyframes ky-pop { from{opacity:0; transform:translateY(8px) scale(.9)} to{opacity:1; transform:none} }
 .ky-watcher .ky-mascot { transition:transform .2s; }
 .ky-watcher.is-react .ky-mascot { transform:scale(1.08); }
+
+/* ============ ボード凡例 ============ */
+.ky-legend { display:flex; align-items:center; flex-wrap:wrap; gap:7px 12px; margin-bottom:12px; font-size:12px; color:var(--muted); }
+.ky-legend-i { display:inline-flex; align-items:center; gap:5px; }
+.ky-legend-sep { color:var(--line); }
+.ky-legend-more { font-size:12px; margin-left:auto; }
+
+/* ============ 使い方 ============ */
+.ky-guide { }
+.ky-guide-hero { display:flex; flex-direction:column; align-items:center; text-align:center; padding:8px 0 6px; }
+.ky-guide-sec { margin-top:30px; }
+.ky-guide-row { display:flex; align-items:flex-start; gap:12px; margin-top:12px; }
+.ky-guide-mini { flex-shrink:0; }
+.ky-guide-bubble { position:relative; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:13px 16px; font-size:14px; line-height:1.75; flex:1; }
+.ky-guide-bubble::before { content:""; position:absolute; left:-7px; top:20px; width:12px; height:12px; background:var(--surface); border-left:1px solid var(--line); border-bottom:1px solid var(--line); transform:rotate(45deg); }
+.ky-guide-cards { display:grid; grid-template-columns:1fr; gap:var(--gap); margin-top:14px; }
+.ky-guide-card { position:relative; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; overflow:hidden; }
+.ky-guide-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent); }
+.ky-guide-card-h { margin-bottom:8px; }
+.ky-guide-card-d { font-size:13.5px; color:var(--muted); line-height:1.65; }
+.ky-guide-card-d b { color:var(--ink); }
+.ky-guide-grades { display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+.ky-guide-grade { display:flex; align-items:center; gap:12px; font-size:14px; }
+.ky-guide-grade b { color:var(--ink); }
+.ky-guide-honmei { background:color-mix(in srgb, var(--cta) 8%, var(--surface)); border:1px solid color-mix(in srgb, var(--cta) 35%, var(--line)); border-radius:16px; padding:16px; margin-top:12px; }
+.ky-guide-honmei-eq { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.ky-guide-plus { font-size:18px; font-weight:800; color:var(--muted); }
+.ky-guide-cta { display:flex; justify-content:center; margin-top:30px; }
+
+@media (min-width: 720px) {
+  .ky-guide-cards { grid-template-columns:repeat(3,1fr); }
+}
 
 /* ============ レース詳細 ============ */
 .ky-back { color:var(--muted); font-size:14px; font-weight:600; padding:8px 0; transition:color .15s; }
