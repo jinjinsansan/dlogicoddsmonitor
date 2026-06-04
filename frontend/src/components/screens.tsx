@@ -392,10 +392,10 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
           }) : <div className="ky-muted">急変シグナルはありません。</div>}
         </div>
 
-        <h2 className="ky-section-t ky-mt">オッズ一覧</h2>
+        <h2 className="ky-section-t ky-mt">出馬表</h2>
         <div className="ky-table">
           <div className="ky-tr ky-th nums">
-            <span>人気</span><span>馬番</span><span className="ky-td-name">馬</span><span>—</span><span className="ky-td-odds">オッズ</span><span></span>
+            <span>人気</span><span>馬番</span><span className="ky-td-name">馬名</span><span>騎手</span><span className="ky-td-odds">オッズ</span><span></span>
           </div>
           {field.map((h) => {
             const isHi = hiSet.has(h.num);
@@ -412,7 +412,7 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
           })}
         </div>
 
-        <p className="ky-fineprint">※ オッズの動きを可視化する情報ツールです。的中・利益を保証するものではありません。馬名は今後追加予定（現在は馬番表示）。</p>
+        <p className="ky-fineprint">※ オッズの動きを可視化する情報ツールです。的中・利益を保証するものではありません。</p>
       </div>
     </div>
   );
