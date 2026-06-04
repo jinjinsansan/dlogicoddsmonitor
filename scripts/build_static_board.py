@@ -247,21 +247,34 @@ def sig_from_row(row, entries, scores):
     }
 
 
+def cap_race_signals(sl, n_drop=3, n_surge=2):
+    """1レースの厳選: 急落 上位3・急騰 上位2(変化率の大きい順)・逆転は全部。"""
+    cp = lambda s: s.get("changePct") if s.get("changePct") is not None else 0
+    drops = sorted([s for s in sl if s["type"] == "drop"], key=cp)[:n_drop]          # 最も下落(負が大)順
+    surges = sorted([s for s in sl if s["type"] == "surge"], key=lambda s: -cp(s))[:n_surge]  # 最も上昇順
+    revs = [s for s in sl if s["type"] == "reversal"]
+    return drops + surges + revs
+
+
 def build_signals_for_date(target_iso, entries_cache, scores):
     rows = (c.table("odds_signals")
             .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
             .in_("venue", JRA_VENUES).eq("race_date", target_iso)
-            .order("notified_at", desc=True).limit(800).execute().data) or []
-    seen, out = set(), []
+            .order("notified_at", desc=True).limit(3000).execute().data) or []
+    seen, by_race = set(), {}
     for row in rows:
         key = f"{row['race_id']}:{row['horse_number']}:{row['signal_type']}"
         if key in seen:
             continue
         seen.add(key)
-        out.append(sig_from_row(row, entries_cache.get(row["race_id"]), scores))
-        if len(out) >= BOARD_LIMIT:
-            break
-    return out
+        sig = sig_from_row(row, entries_cache.get(row["race_id"]), scores)
+        by_race.setdefault(row["race_id"], []).append(sig)
+    out = []
+    for sl in by_race.values():
+        out.extend(cap_race_signals(sl))  # レースごとに 急落3・急騰2・逆転 へ圧縮
+    # 並び: 本命急落を最上位 → 変化率の大きい順
+    out.sort(key=lambda s: (0 if s.get("honmei") else 1, -abs(s.get("changePct") or 0)))
+    return out[:BOARD_LIMIT]
 
 
 def day_signal_summary(target_iso, entries_cache, scores):
@@ -384,7 +397,15 @@ def build_race(race_id, entries, scores):
                            "currOdds": 0, "series": [], "okScore": scores.get(nm)})
         horses.sort(key=lambda h: h["num"])
 
-    signals = [sig_from_row(r, entries, scores) for r in sig_rows]
+    # 重複排除 → 1レース厳選(急落3・急騰2・逆転)
+    seen, dedup = set(), []
+    for r in sig_rows:
+        k = f"{r['race_id']}:{r['horse_number']}:{r['signal_type']}"
+        if k in seen:
+            continue
+        seen.add(k)
+        dedup.append(sig_from_row(r, entries, scores))
+    signals = cap_race_signals(dedup)
     return {
         "raceId": race_id, "venue": venue, "raceNumber": race_number,
         "grade": "", "raceName": "", "surface": "", "distance": 0,
