@@ -1,16 +1,16 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { LandingScreen, BoardScreen, RaceScreen, GuideScreen, type Route } from "./screens";
-import type { Sig } from "./ui";
+import type { BoardPayload } from "@/lib/static";
 
-export default function KyApp({ initialSignals, initialRoute, nowInit }:
-  { initialSignals: Sig[]; initialRoute: Route; nowInit: number }) {
+export default function KyApp({ initialBoard, initialRoute, nowInit }:
+  { initialBoard: BoardPayload; initialRoute: Route; nowInit: number }) {
   const [route, setRoute] = useState<Route>(initialRoute);
   const [now, setNow] = useState(nowInit);
-  const [signals, setSignals] = useState<Sig[]>(initialSignals);
+  const [board, setBoard] = useState<BoardPayload>(initialBoard);
   const [freshId, setFreshId] = useState<string | number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const topIdRef = useRef<string | number | null>(initialSignals[0]?.id ?? null);
+  const topIdRef = useRef<string | number | null>(initialBoard.signals[0]?.id ?? null);
 
   // ライブ時計(1秒)
   useEffect(() => {
@@ -25,13 +25,12 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
       try {
         const r = await fetch("/api/board", { cache: "no-store" });
         if (!r.ok) return;
-        const d = await r.json();
-        const next: Sig[] = d.signals || [];
-        if (!alive || !next.length) return;
-        setSignals(next);
-        if (next[0] && next[0].id !== topIdRef.current) {
-          topIdRef.current = next[0].id;
-          setFreshId(next[0].id);
+        const d: BoardPayload = await r.json();
+        if (!alive) return;
+        setBoard(d);
+        if (d.signals[0] && d.signals[0].id !== topIdRef.current) {
+          topIdRef.current = d.signals[0].id;
+          setFreshId(d.signals[0].id);
         }
       } catch { /* ネットワーク失敗は無視 */ }
     };
@@ -52,7 +51,6 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
     } catch { /* noop */ }
   }, []);
 
-  // ブラウザの戻る/進む
   useEffect(() => {
     const onPop = () => {
       const p = location.pathname;
@@ -66,10 +64,10 @@ export default function KyApp({ initialSignals, initialRoute, nowInit }:
   }, []);
 
   let screen: React.ReactNode;
-  if (route.screen === "board") screen = <BoardScreen now={now} signals={signals} nav={nav} freshId={freshId} />;
+  if (route.screen === "board") screen = <BoardScreen now={now} board={board} nav={nav} freshId={freshId} />;
   else if (route.screen === "race" && route.raceId) screen = <RaceScreen now={now} raceId={route.raceId} nav={nav} />;
   else if (route.screen === "guide") screen = <GuideScreen now={now} nav={nav} />;
-  else screen = <LandingScreen now={now} signals={signals} nav={nav} />;
+  else screen = <LandingScreen now={now} board={board} nav={nav} />;
 
   return (
     <div ref={rootRef} className="ky-app" data-anim="full" data-density="compact">

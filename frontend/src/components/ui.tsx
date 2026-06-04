@@ -27,6 +27,9 @@ export type Sig = {
   honmei?: boolean;        // 本命急落(急落×指数80+)
 };
 
+export type PreviewHorse = { num: number; name: string; jockey: string; okScore?: number | null };
+export type PreviewCard = { raceId: string; venue: string; raceNumber: number; postTime: string; horses: PreviewHorse[] };
+
 export type RaceHorse = {
   num: number;
   name: string;

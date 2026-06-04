@@ -2,10 +2,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Mascot, MascotMark } from "./Mascot";
 import {
-  SIGNAL_META, fmtOdds, fmtPct, fmtClock, postState,
+  SIGNAL_META, fmtOdds, fmtPct, fmtClock, postState, okGrade,
   CountUp, Sparkline, LiveDot, TypeBadge, GradeChip, SignalRow, Ticker, OddsTrendChart, OkScore,
-  type Sig, type Race,
+  type Sig, type Race, type PreviewCard, type PreviewHorse,
 } from "./ui";
+import type { BoardPayload } from "@/lib/static";
 
 const MASCOT_COLOR = "#00E5FF"; // neon drop
 const MASCOT_SCALE = 1.28; // big
@@ -14,8 +15,16 @@ const S = (o: Record<string, unknown>) => o as React.CSSProperties;
 export type Route = { screen: "lp" | "board" | "race" | "guide"; raceId?: string };
 type Nav = (r: Route) => void;
 
+const MODE_LABEL: Record<string, { txt: string; live: boolean }> = {
+  preview: { txt: "事前情報", live: false },
+  live: { txt: "LIVE", live: true },
+  finished: { txt: "結果", live: false },
+};
+
 // ============ ヘッダ ============
-function AppHeader({ now, nav, children }: { now: number; nav: Nav; children?: React.ReactNode }) {
+function AppHeader({ now, nav, mode, targetLabel, children }:
+  { now: number; nav: Nav; mode?: string; targetLabel?: string; children?: React.ReactNode }) {
+  const ml = mode ? MODE_LABEL[mode] : null;
   return (
     <header className="ky-appbar">
       <div className="ky-appbar-in">
@@ -24,9 +33,13 @@ function AppHeader({ now, nav, children }: { now: number; nav: Nav; children?: R
           <span className="ky-wordmark"><span style={{ color: "var(--surge)" }}>急騰</span><span style={{ color: "var(--drop)" }}>急落</span>オッズくん</span>
         </button>
         <div className="ky-appbar-r">
+          {ml && targetLabel && (
+            <span className={`ky-daytag ${ml.live ? "is-live" : ""}`}>
+              {ml.live && <span className="ky-daytag-dot" />}<b>{targetLabel}</b> {ml.txt}
+            </span>
+          )}
           <button className="ky-link" onClick={() => nav({ screen: "guide" })}>使い方</button>
           <span className="nums ky-clock">{fmtClock(now)}</span>
-          <LiveDot />
         </div>
       </div>
       {children}
@@ -106,8 +119,18 @@ function activeVenues(signals: Sig[]) {
 }
 
 // ============ LP ============
-export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig[]; nav: Nav }) {
-  const preview = signals.slice(0, 4);
+export function LandingScreen({ now, board, nav }: { now: number; board: BoardPayload; nav: Nav }) {
+  const { signals, mode, preview, targetLabel } = board;
+  const miniSignals = signals.slice(0, 4);
+  // 事前情報用: 注目馬(指数A/B)を数頭ピック
+  const miniPicks = useMemo(() => {
+    const out: { card: PreviewCard; h: PreviewHorse }[] = [];
+    for (const card of preview) {
+      const best = card.horses.filter((h) => (h.okScore ?? 0) >= 70).sort((a, b) => (b.okScore ?? 0) - (a.okScore ?? 0))[0];
+      if (best) out.push({ card, h: best });
+    }
+    return out.sort((a, b) => (b.h.okScore ?? 0) - (a.h.okScore ?? 0)).slice(0, 4);
+  }, [preview]);
   const [gate, setGate] = useState(false);
   const openGate = () => setGate(true);
   const enterBoard = () => { setGate(false); nav({ screen: "board" }); };
@@ -167,13 +190,25 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
           </div>
           <div className="ky-glass ky-miniboard">
             <div className="ky-miniboard-h">
-              <LiveDot label="急変ボード" />
-              <span className="ky-muted nums">更新 {fmtClock(now)}</span>
+              <LiveDot label={mode === "preview" ? "本日の注目馬" : "急変ボード"} />
+              <span className="ky-muted nums">{targetLabel}</span>
             </div>
             <div className="ky-miniboard-list">
-              {preview.length ? preview.map((s, i) => (
-                <SignalRow key={s.id} s={s} layout="list" now={now} onOpen={(id) => nav({ screen: "race", raceId: id })} fresh={i === 0} />
-              )) : <div className="ky-muted" style={{ padding: "10px 4px", fontSize: 13 }}>現在シグナルはありません（JRA開催日に更新）。</div>}
+              {miniSignals.length ? (
+                miniSignals.map((s, i) => (
+                  <SignalRow key={s.id} s={s} layout="list" now={now} onOpen={(id) => nav({ screen: "race", raceId: id })} fresh={i === 0} />
+                ))
+              ) : miniPicks.length ? (
+                miniPicks.map(({ card, h }) => (
+                  <button key={card.raceId + h.num} className="ky-mini-pick" onClick={() => nav({ screen: "race", raceId: card.raceId })}>
+                    <span className="ky-mini-pick-race">{card.venue}<b>{card.raceNumber}R</b></span>
+                    <span className="ky-mini-pick-name">{h.num} {h.name}</span>
+                    <OkScore score={h.okScore} size="sm" />
+                  </button>
+                ))
+              ) : (
+                <div className="ky-muted" style={{ padding: "10px 4px", fontSize: 13 }}>{targetLabel ? `${targetLabel}の情報は準備中です。` : "JRA開催日に更新されます。"}</div>
+              )}
             </div>
           </div>
         </div>
@@ -225,7 +260,91 @@ const TABS = [
   { key: "all", label: "全部", arrow: "◎" },
 ] as const;
 
-export function BoardScreen({ now, signals, nav, freshId }: { now: number; signals: Sig[]; nav: Nav; freshId: string | number | null }) {
+function fmtCountdown(ms: number) {
+  if (ms <= 0) return "まもなく";
+  const m = Math.floor(ms / 60000);
+  const h = Math.floor(m / 60);
+  if (h >= 1) return `${h}時間${m % 60}分`;
+  return `${m}分`;
+}
+
+function PreviewRaceCard({ card, nav }: { card: PreviewCard; nav: Nav }) {
+  const ranked = card.horses.slice().sort((a, b) => (b.okScore ?? 0) - (a.okScore ?? 0));
+  const picks = (ranked.filter((h) => (h.okScore ?? 0) >= 70).slice(0, 3));
+  const top = picks.length ? picks : ranked.slice(0, 3);
+  return (
+    <button className="ky-prace" onClick={() => nav({ screen: "race", raceId: card.raceId })}>
+      <div className="ky-prace-h">
+        <span className="ky-prace-r">{card.venue}<b>{card.raceNumber}R</b></span>
+        <span className="ky-muted nums">{card.postTime}発走</span>
+      </div>
+      <div className="ky-prace-picks">
+        {top.map((h) => (
+          <div className="ky-prace-pick" key={h.num}>
+            <span className="ky-prace-num nums">{h.num}</span>
+            <span className="ky-prace-name">{h.name}</span>
+            {okGrade(h.okScore) ? <OkScore score={h.okScore} size="sm" /> : <span className="ky-muted" style={{ fontSize: 11 }}>—</span>}
+          </div>
+        ))}
+      </div>
+      <div className="ky-prace-foot ky-muted nums">{card.horses.length}頭 · 注目馬</div>
+    </button>
+  );
+}
+
+function PreviewBoard({ now, preview, nav, targetLabel, liveStartMs }:
+  { now: number; preview: PreviewCard[]; nav: Nav; targetLabel: string; liveStartMs: number | null }) {
+  const [venue, setVenue] = useState("all");
+  const venues = ["all", ...Array.from(new Set(preview.map((c) => c.venue).filter(Boolean)))];
+  const shown = preview.filter((c) => venue === "all" || c.venue === venue);
+  const cd = liveStartMs ? fmtCountdown(liveStartMs - now) : null;
+  return (
+    <div className="ky-board">
+      <AppHeader now={now} nav={nav} mode="preview" targetLabel={targetLabel} />
+      <div className="ky-board-in">
+        <div className="ky-preview-banner">
+          <Mascot size={52} mood="happy" color={MASCOT_COLOR} idle glow={false} />
+          <div className="ky-preview-banner-tx">
+            <div className="ky-preview-banner-t"><b>{targetLabel}</b> の事前情報</div>
+            <div className="ky-preview-banner-d">{cd ? `あと ${cd} で急変監視スタート` : "まもなく急変監視スタート"}・出馬表と注目馬を先取りチェック！</div>
+          </div>
+        </div>
+
+        <div className="ky-filterbar">
+          <span className="ky-muted nums" style={{ fontSize: 13 }}>{shown.length} レース</span>
+          <div className="ky-venue-wrap">
+            <select className="ky-venue nums" value={venue} onChange={(e) => setVenue(e.target.value)}>
+              {venues.map((v) => <option key={v} value={v}>{v === "all" ? "全会場" : v}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="ky-legend">
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-high ky-ok-sm"><span className="ky-ok-val">A</span></span>実力上位</span>
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-mid ky-ok-sm"><span className="ky-ok-val">B</span></span>有力</span>
+          <span className="ky-legend-i"><span className="ky-ok ky-ok-low ky-ok-sm"><span className="ky-ok-val">C</span></span>標準</span>
+          <button className="ky-link ky-legend-more" onClick={() => nav({ screen: "guide" })}>くわしい使い方 →</button>
+        </div>
+
+        {shown.length ? (
+          <div className="ky-preview-grid">
+            {shown.map((card) => <PreviewRaceCard key={card.raceId} card={card} nav={nav} />)}
+          </div>
+        ) : (
+          <div className="ky-empty">
+            <Mascot size={104} mood="idle" color={MASCOT_COLOR} />
+            <div className="ky-empty-t">事前情報を準備中です。</div>
+          </div>
+        )}
+
+        <p className="ky-fineprint">事前情報＝出馬表＋オッズくん指数(A/B/C)。オッズの急変は監視開始後に表示されます。※情報ツールであり的中・利益を保証するものではありません。</p>
+      </div>
+    </div>
+  );
+}
+
+export function BoardScreen({ now, board, nav, freshId }: { now: number; board: BoardPayload; nav: Nav; freshId: string | number | null }) {
+  const { signals, mode, preview, targetLabel, liveStartMs } = board;
   const [filter, setFilter] = useState<string>("drop");
   const [venue, setVenue] = useState("all");
   const venues = ["all", ...useMemo(() => activeVenues(signals), [signals])];
@@ -271,11 +390,15 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
     if (fs) { setSpot(fs); setReact(true); }
   }, [freshId, signals]);
 
+  if (mode === "preview") {
+    return <PreviewBoard now={now} preview={preview} nav={nav} targetLabel={targetLabel} liveStartMs={liveStartMs} />;
+  }
+
   const onOpen = (id: string) => nav({ screen: "race", raceId: id });
 
   return (
     <div className="ky-board">
-      <AppHeader now={now} nav={nav}><Ticker signals={signals} /></AppHeader>
+      <AppHeader now={now} nav={nav} mode={mode} targetLabel={targetLabel}><Ticker signals={signals} /></AppHeader>
 
       <div className="ky-board-in">
         <div className="ky-board-meta">
