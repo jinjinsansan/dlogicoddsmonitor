@@ -60,10 +60,20 @@ export default function BoardClient({
           <Link href="/" className="font-bold text-lg">
             オッズ<span className="text-drop">急落</span>くん
           </Link>
-          <span className="flex items-center gap-1.5 text-xs text-muted">
-            <span className="live-dot inline-block w-2 h-2 rounded-full bg-emerald-400" />
-            LIVE
-          </span>
+          <div className="flex items-center gap-3">
+            <Link href="/about" className="text-xs text-muted hover:text-ink cursor-pointer">
+              使い方
+            </Link>
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <span className="live-dot inline-block w-2 h-2 rounded-full bg-emerald-400" />
+              LIVE
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-muted mb-2 nums">
+          <span className="text-drop">急落 {signals.filter((s) => s.type === "drop").length}</span>
+          <span className="text-surge">急騰 {signals.filter((s) => s.type === "surge").length}</span>
+          <span className="text-reversal">逆転 {signals.filter((s) => s.type === "reversal").length}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {TABS.map((t) => {

@@ -14,9 +14,14 @@ export default async function LandingPage() {
         <span className="font-bold text-lg">
           オッズ<span className="text-drop">急落</span>くん
         </span>
-        <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface text-muted border border-line">
-          β版・無料
-        </span>
+        <div className="flex items-center gap-3">
+          <Link href="/about" className="text-sm text-muted hover:text-ink cursor-pointer">
+            使い方
+          </Link>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface text-muted border border-line">
+            β版・無料
+          </span>
+        </div>
       </nav>
 
       {/* hero */}
