@@ -1,11 +1,11 @@
+import KyApp from "@/components/KyApp";
 import { fetchBoard } from "@/lib/data";
-import BoardClient from "./BoardClient";
+import { toSig } from "@/lib/toSig";
 
 export const dynamic = "force-dynamic";
 
 export default async function BoardPage() {
-  const signals = await fetchBoard();
-  return (
-    <BoardClient initial={signals} initialUpdatedAt={new Date().toISOString()} />
-  );
+  const board = await fetchBoard();
+  const signals = board.map(toSig);
+  return <KyApp initialSignals={signals} initialRoute={{ screen: "board" }} nowInit={Date.now()} />;
 }
