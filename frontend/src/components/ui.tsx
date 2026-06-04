@@ -23,6 +23,8 @@ export type Sig = {
   jockey: string;
   postTime: number | null; // ms epoch or null(未取得)
   spark?: number[] | null;
+  okScore?: number | null; // オッズくん指数(0-100, ナレッジ無しnull)
+  honmei?: boolean;        // 本命急落(急落×指数80+)
 };
 
 export type RaceHorse = {
@@ -32,6 +34,7 @@ export type RaceHorse = {
   popularity: number;
   currOdds: number;
   series: number[];
+  okScore?: number | null; // オッズくん指数
 };
 export type Race = {
   raceId: string;
@@ -160,13 +163,31 @@ export function GradeChip({ grade }: { grade: string }) {
   return <span className="ky-grade" style={{ background: isG ? "var(--cta)" : "var(--surface-2)", color: isG ? "#0A0E17" : "var(--muted)", borderColor: isG ? "transparent" : "var(--line)" }}>{grade}</span>;
 }
 
+// --- オッズくん指数(中身はエンジン評価。ブランド名は出さない=独自の注目度の参考値) ---
+export function okTier(score: number | null | undefined): "high" | "mid" | "low" | null {
+  if (score == null) return null;
+  if (score >= 80) return "high";
+  if (score >= 70) return "mid";
+  return "low";
+}
+export function OkScore({ score, size = "md" }: { score: number | null | undefined; size?: "sm" | "md" }) {
+  const tier = okTier(score);
+  if (tier == null || score == null) return null;
+  return (
+    <span className={`ky-ok ky-ok-${tier} ${size === "sm" ? "ky-ok-sm" : ""}`} title="オッズくん指数（独自の注目度の参考値）">
+      <span className="ky-ok-cap">指数</span>
+      <span className="nums ky-ok-val">{Math.round(score)}</span>
+    </span>
+  );
+}
+
 // --- SignalRow ---
 export function SignalRow({ s, layout = "card", now, onOpen, fresh }:
   { s: Sig; layout?: "card" | "list" | "heat"; now: number; onOpen: (id: string) => void; fresh?: boolean }) {
   const m = SIGNAL_META[s.type];
   const ps = postState(s.postTime, now);
   const isRev = s.type === "reversal";
-  const cls = `ky-row ky-row-${layout} ${ps.done ? "is-done" : ""} ${fresh ? "is-fresh" : ""}`;
+  const cls = `ky-row ky-row-${layout} ${ps.done ? "is-done" : ""} ${fresh ? "is-fresh" : ""} ${s.honmei ? "is-honmei" : ""}`;
 
   if (layout === "heat") {
     const intensity = Math.min(1, Math.abs(s.changePct || 0) / 55);
@@ -192,6 +213,8 @@ export function SignalRow({ s, layout = "card", now, onOpen, fresh }:
         <span className="ky-list-horse">
           <span className="nums ky-list-numchip" style={{ color: m.varc, borderColor: `color-mix(in srgb, ${m.varc} 45%, transparent)` }}>{s.horseNumber}</span>
           {isRev ? <span className="ky-rev">1番人気交代 <b className="nums">{s.newFav}</b><span className="ky-muted"> ← {s.oldFav}</span></span> : <span className="ky-list-name">{s.horseName}</span>}
+          {s.honmei && <span className="ky-honmei">本命</span>}
+          {!isRev && <OkScore score={s.okScore} size="sm" />}
         </span>
         {!isRev && <span className="ky-list-odds nums"><span className="ky-muted">{fmtOdds(s.prevOdds)}</span><span className="ky-arrowto">→</span>{s.currOdds != null ? <CountUp value={s.currOdds} /> : "—"}</span>}
         {!isRev && <span className="ky-list-spark"><Sparkline data={s.spark} color={m.varc} w={56} h={18} strokeW={1.6} /></span>}

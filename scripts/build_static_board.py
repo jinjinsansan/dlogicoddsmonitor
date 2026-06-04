@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""オッズ急落くん: フロント完成JSONを生成して静的配信ディレクトリへ書き出す。
+"""急騰急落オッズくん: フロント完成JSONを生成して静的配信ディレクトリへ書き出す。
 
 読み取り経路からDBを外すための心臓部。Supabase(監視の書込先)を背景で読み、
 フロントがそのまま描画できる board.json / race/<id>.json を生成する。
-馬名・騎手は出馬表(fetch_race_entries)から焼き込み済み。
+馬名・騎手は出馬表(fetch_race_entries)から、**オッズくん指数**(中身はD-Logic
+エンジン、ブランド名は出さない)は score_horses.py(backend venv)から焼き込む。
 
 出力(nginx /kyuraku/ が配信):
   /opt/dlogic/odds-monitor/static_out/board.json
   /opt/dlogic/odds-monitor/static_out/race/<race_id>.json
-出馬表キャッシュ: /opt/dlogic/odds-monitor/data/race_entries_full.json  {race_id:{num:{name,jockey}}}
+キャッシュ:
+  data/race_entries_full.json  {race_id:{num:{name,jockey}}}
+  data/score_cache.json        {馬名: オッズくん指数 or null}
 
-実行(VPS):
+実行(VPS, cron */5):
   /opt/dlogic/linebot/venv/bin/python /opt/dlogic/odds-monitor/scripts/build_static_board.py
 """
 import json
 import os
 import sys
 import time
+import subprocess
 from datetime import datetime, timezone
 
 sys.path.insert(0, "/opt/dlogic/linebot")
@@ -36,10 +40,17 @@ except Exception:
     fetch_race_entries = None
 
 JRA_VENUES = ['東京', '中山', '阪神', '京都', '中京', '新潟', '福島', '小倉', '札幌', '函館']
-OUT = "/opt/dlogic/odds-monitor/static_out"
+BASE = "/opt/dlogic/odds-monitor"
+OUT = os.path.join(BASE, "static_out")
 RACE_DIR = os.path.join(OUT, "race")
-ENTRIES_CACHE = "/opt/dlogic/odds-monitor/data/race_entries_full.json"
+DATA = os.path.join(BASE, "data")
+ENTRIES_CACHE = os.path.join(DATA, "race_entries_full.json")
+SCORE_CACHE = os.path.join(DATA, "score_cache.json")
+NEEDED = os.path.join(DATA, "needed_names.json")
+SCORE_PY = "/opt/dlogic/backend/venv/bin/python"
+SCORE_SCRIPT = os.path.join(BASE, "scripts/score_horses.py")
 BOARD_LIMIT = 120
+HONMEI_MIN = 80  # オッズくん指数がこれ以上 かつ 急落 = 「本命급落」
 
 c = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
@@ -68,24 +79,23 @@ def parse_detail(raw):
     return raw
 
 
-def load_entries_cache():
-    if os.path.exists(ENTRIES_CACHE):
+def load_json(p, default):
+    if os.path.exists(p):
         try:
-            return json.load(open(ENTRIES_CACHE, encoding="utf-8"))
+            return json.load(open(p, encoding="utf-8"))
         except Exception:
-            return {}
-    return {}
+            return default
+    return default
 
 
-def save_entries_cache(cache):
-    os.makedirs(os.path.dirname(ENTRIES_CACHE), exist_ok=True)
-    tmp = ENTRIES_CACHE + ".tmp"
-    json.dump(cache, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
-    os.replace(tmp, ENTRIES_CACHE)
+def save_json(p, obj):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    json.dump(obj, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+    os.replace(tmp, p)
 
 
 def ensure_entries(race_ids, cache):
-    """board に出てくるレースの出馬表(name,jockey)を確保。未取得はスクレイプ。"""
     if not fetch_race_entries:
         return
     changed = False
@@ -110,19 +120,32 @@ def ensure_entries(race_ids, cache):
         except Exception:
             pass
     if changed:
-        save_entries_cache(cache)
+        save_json(ENTRIES_CACHE, cache)
 
 
-def sig_from_row(row, entries):
+def run_scoring(names):
+    """未計算の馬名を score_horses.py(backend venv) で採点 → score_cache を返す。"""
+    save_json(NEEDED, sorted(set(n for n in names if n)))
+    try:
+        subprocess.run([SCORE_PY, SCORE_SCRIPT], timeout=600, check=False)
+    except Exception as ex:
+        print(f"  scoring失敗: {ex}", flush=True)
+    return load_json(SCORE_CACHE, {})
+
+
+def sig_from_row(row, entries, scores):
     d = parse_detail(row.get("detail"))
     num = row.get("horse_number")
     e = (entries or {}).get(str(num)) if entries else None
+    name = (e or {}).get("name") or f"{num}番"
+    ok = scores.get(name)
+    stype = row.get("signal_type")
     return {
         "id": row.get("id"),
         "raceId": row.get("race_id"),
         "venue": row.get("venue") or "",
         "raceNumber": row.get("race_number") or 0,
-        "type": row.get("signal_type"),
+        "type": stype,
         "horseNumber": num,
         "currOdds": d.get("curr_odds", d.get("new_fav_odds_curr")),
         "prevOdds": d.get("prev_odds", d.get("new_fav_odds_prev")),
@@ -130,16 +153,18 @@ def sig_from_row(row, entries):
         "notifiedAt": to_ms(row.get("notified_at")),
         "oldFav": d.get("old_favorite"),
         "newFav": d.get("new_favorite"),
-        "horseName": (e or {}).get("name") or f"{num}番",
+        "horseName": name,
         "grade": "",
         "popularity": None,
         "jockey": "",
         "postTime": None,
         "spark": None,
+        "okScore": ok,                                  # オッズくん指数(0-100, ナレッジ無しnull)
+        "honmei": bool(stype == "drop" and ok is not None and ok >= HONMEI_MIN),  # 本命급落
     }
 
 
-def build_board(entries_cache):
+def build_board(entries_cache, scores):
     rows = (c.table("odds_signals")
             .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
             .in_("venue", JRA_VENUES)
@@ -154,13 +179,11 @@ def build_board(entries_cache):
         board.append(row)
         if len(board) >= BOARD_LIMIT:
             break
-    race_ids = list({r["race_id"] for r in board})
-    ensure_entries(race_ids, entries_cache)
-    signals = [sig_from_row(r, entries_cache.get(r["race_id"])) for r in board]
-    return signals, race_ids
+    signals = [sig_from_row(r, entries_cache.get(r["race_id"]), scores) for r in board]
+    return signals
 
 
-def build_race(race_id, entries):
+def build_race(race_id, entries, scores):
     sig_rows = (c.table("odds_signals")
                 .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
                 .eq("race_id", race_id).order("notified_at", desc=True).execute().data) or []
@@ -201,10 +224,8 @@ def build_race(race_id, entries):
                 series.append(v)
             else:
                 series.append(last_known if last_known > 0 else None)
-        # 先頭欠損を最初の有効値で埋める
         first_valid = next((x for x in series if x), 0)
         series = [x if x else first_valid for x in series]
-        curr = 0.0
         try:
             curr = float(last.get(key) or 0)
         except Exception:
@@ -212,18 +233,20 @@ def build_race(race_id, entries):
         if not curr:
             curr = series[-1] if series else 0
         e = (entries or {}).get(key)
+        name = (e or {}).get("name") or f"{num}番"
         horses.append({
             "num": num,
-            "name": (e or {}).get("name") or f"{num}番",
+            "name": name,
             "jockey": (e or {}).get("jockey") or "",
             "popularity": 0,
             "currOdds": curr,
             "series": series,
+            "okScore": scores.get(name),
         })
     for i, h in enumerate(sorted(horses, key=lambda x: x["currOdds"])):
         h["popularity"] = i + 1
 
-    signals = [sig_from_row(r, entries) for r in sig_rows]
+    signals = [sig_from_row(r, entries, scores) for r in sig_rows]
 
     return {
         "raceId": race_id,
@@ -241,25 +264,48 @@ def build_race(race_id, entries):
     }
 
 
-def write_json(path, obj):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    json.dump(obj, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
-    os.replace(tmp, path)
-
-
 def main():
     os.makedirs(RACE_DIR, exist_ok=True)
-    entries_cache = load_entries_cache()
-    signals, race_ids = build_board(entries_cache)
+    entries_cache = load_json(ENTRIES_CACHE, {})
+
+    # board 対象 race_id を先に確定
+    rows = (c.table("odds_signals")
+            .select("race_id,horse_number,signal_type,notified_at")
+            .in_("venue", JRA_VENUES)
+            .order("notified_at", desc=True)
+            .limit(500).execute().data) or []
+    seen, race_ids = set(), []
+    for row in rows:
+        key = f"{row['race_id']}:{row['horse_number']}:{row['signal_type']}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if row["race_id"] not in race_ids:
+            race_ids.append(row["race_id"])
+        if len(seen) >= BOARD_LIMIT:
+            break
+
+    ensure_entries(race_ids, entries_cache)
+
+    # board 関連レースの全出走馬名を採点対象に
+    names = []
+    for rid in race_ids:
+        for info in (entries_cache.get(rid) or {}).values():
+            nm = info.get("name") if isinstance(info, dict) else info
+            if nm:
+                names.append(nm)
+    scores = run_scoring(names)
+
+    signals = build_board(entries_cache, scores)
     updated = datetime.now(timezone.utc).isoformat()
-    write_json(os.path.join(OUT, "board.json"), {"signals": signals, "updatedAt": updated})
+    save_json(os.path.join(OUT, "board.json"), {"signals": signals, "updatedAt": updated})
     for rid in race_ids:
         try:
-            write_json(os.path.join(RACE_DIR, f"{rid}.json"), build_race(rid, entries_cache.get(rid)))
+            save_json(os.path.join(RACE_DIR, f"{rid}.json"), build_race(rid, entries_cache.get(rid), scores))
         except Exception as ex:
             print(f"  race {rid} 失敗: {ex}", flush=True)
-    print(f"board: {len(signals)} signals / races: {len(race_ids)} / updated {updated}", flush=True)
+    honmei = len([1 for s in signals if s.get("honmei")])
+    print(f"board: {len(signals)} signals(本命급落 {honmei}) / races: {len(race_ids)} / updated {updated}", flush=True)
 
 
 if __name__ == "__main__":

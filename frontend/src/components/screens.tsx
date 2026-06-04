@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Mascot, MascotMark } from "./Mascot";
 import {
   SIGNAL_META, fmtOdds, fmtPct, fmtClock, postState,
-  CountUp, Sparkline, LiveDot, TypeBadge, GradeChip, SignalRow, Ticker, OddsTrendChart,
+  CountUp, Sparkline, LiveDot, TypeBadge, GradeChip, SignalRow, Ticker, OddsTrendChart, OkScore,
   type Sig, type Race,
 } from "./ui";
 
@@ -295,7 +295,7 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
           </div>
         )}
 
-        <p className="ky-fineprint">※ オッズの動きを可視化する情報ツールです。的中・利益を保証するものではありません。</p>
+        <p className="ky-fineprint"><b style={{ color: "var(--cta)" }}>指数</b>=オッズくん指数(出走馬の独自の注目度・参考値)。<b style={{ color: "var(--cta)" }}>★本命</b>=急落かつ指数80以上＝資金と実力が一致したサイン。※情報ツールであり的中・利益を保証するものではありません。</p>
       </div>
 
       <div className={`ky-watcher ${react ? "is-react" : ""}`} style={S({ "--ms": MASCOT_SCALE })}>
@@ -395,7 +395,7 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
         <h2 className="ky-section-t ky-mt">出馬表</h2>
         <div className="ky-table">
           <div className="ky-tr ky-th nums">
-            <span>人気</span><span>馬番</span><span className="ky-td-name">馬名</span><span>騎手</span><span className="ky-td-odds">オッズ</span><span></span>
+            <span>人気</span><span>馬番</span><span className="ky-td-name">馬名</span><span className="ky-td-jky">騎手</span><span className="ky-td-ok">指数</span><span className="ky-td-odds">オッズ</span><span className="ky-td-spark"></span>
           </div>
           {field.map((h) => {
             const isHi = hiSet.has(h.num);
@@ -405,12 +405,14 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
                 <span className="nums ky-td-num" style={isHi ? { color: "var(--drop)", borderColor: "var(--drop)" } : {}}>{h.num}</span>
                 <span className="ky-td-name">{h.name}</span>
                 <span className="ky-td-jky">{h.jockey || "—"}</span>
+                <span className="ky-td-ok">{h.okScore != null ? <OkScore score={h.okScore} size="sm" /> : <span className="ky-muted">—</span>}</span>
                 <span className="nums ky-td-odds"><CountUp value={h.currOdds} /></span>
                 <span className="ky-td-spark"><Sparkline data={h.series.slice(-10)} color={isHi ? "var(--drop)" : "var(--muted)"} w={52} h={18} strokeW={1.5} /></span>
               </div>
             );
           })}
         </div>
+        <p className="ky-fineprint" style={{ marginTop: 10 }}>「オッズくん指数」は出走馬の独自の注目度（0–100の参考値）。<b style={{ color: "var(--cta)" }}>本命急落</b>＝急落かつ指数80以上＝資金と実力が一致したサイン。的中・利益を保証するものではありません。</p>
 
         <p className="ky-fineprint">※ オッズの動きを可視化する情報ツールです。的中・利益を保証するものではありません。</p>
       </div>
