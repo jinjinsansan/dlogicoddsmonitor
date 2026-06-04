@@ -7,6 +7,7 @@ import {
   type Sig, type Race, type PreviewCard, type PreviewHorse,
 } from "./ui";
 import type { BoardPayload } from "@/lib/static";
+import { pushSupported, isTracked, trackRace, untrackRace } from "@/lib/push";
 
 const MASCOT_COLOR = "#00E5FF"; // neon drop
 const MASCOT_SCALE = 1.28; // big
@@ -472,6 +473,9 @@ export function BoardScreen({ now, board, nav, freshId }: { now: number; board: 
 export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; nav: Nav }) {
   const [race, setRace] = useState<Race | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [tracked, setTracked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [supported, setSupported] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -482,6 +486,27 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
       .catch(() => { if (alive) setState("error"); });
     return () => { alive = false; };
   }, [raceId]);
+
+  useEffect(() => {
+    setSupported(pushSupported());
+    setTracked(isTracked(raceId));
+  }, [raceId]);
+
+  const toggleTrack = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (tracked) { await untrackRace(raceId); setTracked(false); }
+      else { await trackRace(raceId); setTracked(true); }
+    } catch (e) {
+      const msg = (e as Error)?.message;
+      if (msg === "denied") alert("通知がブロックされています。ブラウザの設定で通知を許可してください。");
+      else if (msg === "unsupported") alert("このブラウザは通知に対応していません。");
+      else alert("追跡の登録に失敗しました。少し時間をおいて再度お試しください。");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (state !== "ok" || !race) {
     return (
@@ -519,6 +544,14 @@ export function RaceScreen({ now, raceId, nav }: { now: number; raceId: string; 
           {(race.raceName || race.distance) ? (
             <div className="ky-race-meta nums">{[race.raceName, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.nHorses ? `${race.nHorses}頭` : ""].filter(Boolean).join(" · ")}</div>
           ) : null}
+          {supported && (
+            <button className={`ky-track ${tracked ? "is-on" : ""}`} onClick={toggleTrack} disabled={busy}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {tracked ? "追跡中・直前に通知" : "このレースを追跡"}
+            </button>
+          )}
         </div>
 
         <div className="ky-glass ky-chart-card">

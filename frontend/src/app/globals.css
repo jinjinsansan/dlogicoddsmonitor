@@ -332,6 +332,12 @@ b { font-weight: 700; }
 .ky-back { color:var(--muted); font-size:14px; font-weight:600; padding:8px 0; transition:color .15s; }
 .ky-back:hover { color:var(--ink); }
 .ky-race-head { margin:6px 0 18px; }
+.ky-track { display:inline-flex; align-items:center; gap:7px; margin-top:12px; padding:9px 16px; border-radius:12px; font-size:14px; font-weight:700; background:var(--surface); border:1px solid var(--line); color:var(--ink); transition:transform .12s, filter .15s, background .15s, border-color .15s; }
+.ky-track:hover { border-color:color-mix(in srgb, var(--drop) 50%, var(--line)); transform:translateY(-1px); }
+.ky-track:disabled { opacity:.6; cursor:default; }
+.ky-track svg { color:var(--drop); }
+.ky-track.is-on { background:var(--drop); color:var(--chip-ink); border-color:var(--drop); box-shadow:0 4px 16px -6px var(--drop); }
+.ky-track.is-on svg { color:var(--chip-ink); fill:var(--chip-ink); }
 .ky-race-title { display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
 .ky-race-venue { font-size:26px; font-weight:900; }
 .ky-race-meta { font-size:13px; color:var(--muted); margin-top:7px; }
