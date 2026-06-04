@@ -4,7 +4,8 @@
 > 状態・決定事項・検証結果・次の一手が全部ここにある。作成: 2026-06-04。
 
 ## いまの状態(一行)
-**MVP実装完了・ローカル稼働確認済(2026-06-04)。** 次は「ブラウザで確認→フィードバック反映→Vercelデプロイ(kyuraku.dlogicai.in)」。
+**✅ ベータ本番公開済(2026-06-04): https://www.oddskun.com/**(Vercel, GitHub jinjinsansan/dlogicoddsmonitor の frontend/ を Root Directory に、env=SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY[agku])。
+次の候補: ①金曜のJRAオッズ(Lightpanda)確認=週末に新JRAシグナルが入るかの生命線 ②馬名表示(monitor拡張) ③ユーザー反応の収集・改善 ④Bフォワードテスト。
 
 ### MVP実装メモ
 - 場所: `frontend/`(Next.js14 App Router + Tailwind + Recharts)。`npm run dev` で http://localhost:3000。
