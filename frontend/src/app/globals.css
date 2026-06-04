@@ -188,6 +188,18 @@ b { font-weight: 700; }
 .ky-miniboard { padding:13px; }
 .ky-miniboard-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding:0 2px; font-size:12px; }
 .ky-miniboard-list { display:flex; flex-direction:column; gap:7px; }
+/* ミニ急変ボードは枠が狭い → 常にコンパクト3列(スマホと同形)。馬番チップとオッズの重なりを防ぐ */
+.ky-miniboard-list .ky-row-list {
+  grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-areas:
+    "type race post"
+    "horse horse pct";
+  column-gap:9px; row-gap:5px; padding:10px 13px 10px 16px;
+}
+.ky-miniboard-list .ky-list-odds, .ky-miniboard-list .ky-list-spark { display:none; }
+.ky-miniboard-list .ky-list-race { justify-self:start; }
+.ky-miniboard-list .ky-list-post { justify-self:end; }
+.ky-miniboard-list .ky-list-pct { justify-self:end; }
 
 .ky-bento { display:grid; grid-template-columns:1fr; gap:var(--gap); padding:14px 0; }
 .ky-bento-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px; }

@@ -21,7 +21,7 @@ function AppHeader({ now, nav, children }: { now: number; nav: Nav; children?: R
       <div className="ky-appbar-in">
         <button className="ky-brand" onClick={() => nav({ screen: "lp" })}>
           <MascotMark size={30} color={MASCOT_COLOR} />
-          <span className="ky-wordmark"><span className="ky-wm-accent">急騰急落</span>オッズくん</span>
+          <span className="ky-wordmark"><span style={{ color: "var(--surge)" }}>急騰</span><span style={{ color: "var(--drop)" }}>急落</span>オッズくん</span>
         </button>
         <div className="ky-appbar-r">
           <span className="nums ky-clock">{fmtClock(now)}</span>
@@ -128,7 +128,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
       <nav className="ky-lp-nav">
         <div className="ky-brand">
           <MascotMark size={32} color={MASCOT_COLOR} />
-          <span className="ky-wordmark"><span className="ky-wm-accent">急騰急落</span>オッズくん</span>
+          <span className="ky-wordmark"><span style={{ color: "var(--surge)" }}>急騰</span><span style={{ color: "var(--drop)" }}>急落</span>オッズくん</span>
         </div>
         <div className="ky-lp-nav-r">
           <button className="ky-link" onClick={openGate}>ボード</button>
