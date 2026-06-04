@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Mascot, MascotMark } from "./Mascot";
 import {
   SIGNAL_META, fmtOdds, fmtPct, fmtClock, postState,
@@ -66,14 +66,14 @@ function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => vo
           <div className="ky-gate-done">
             <Mascot size={96} mood="happy" color={MASCOT_COLOR} idle glow />
             <h3 className="ky-gate-title">友だち追加、ありがとう！</h3>
-            <p className="ky-gate-sub">急変を見つけたら、オッズくんがLINEでお知らせします。さっそく今の相場を見てみましょう。</p>
+            <p className="ky-gate-sub">さっそく今の相場を見てみよう。急変ボードはぜんぶ無料で見放題だよ。</p>
             <button className="ky-btn ky-btn-cta ky-gate-go" onClick={onEnter}>ボードを見る →</button>
           </div>
         ) : (
           <>
             <div className="ky-gate-mascot"><Mascot size={78} mood="happy" color={MASCOT_COLOR} idle glow={false} /></div>
             <h3 className="ky-gate-title">LINEで友だち追加して<br /><span className="ky-gate-free">無料で見放題</span></h3>
-            <p className="ky-gate-sub">全レースのオッズ急変を、LINEですぐ受け取れます。登録は10秒・もちろん無料。</p>
+            <p className="ky-gate-sub">全レースのオッズ急変ボードが、ぜんぶ無料で見放題。LINEで友だち追加するだけ・10秒。</p>
             <button className="ky-line-btn" onClick={addFriend}>
               <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C6.9 3 2.75 6.35 2.75 10.5c0 3.72 3.3 6.84 7.78 7.43.3.06.71.2.81.45.09.23.06.59.03.82l-.13.79c-.04.23-.18.91.8.5 .98-.42 5.3-3.12 7.23-5.34 1.33-1.46 1.97-2.95 1.97-4.65C21.25 6.35 17.1 3 12 3Z" /><rect x="6.4" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /><rect x="15.6" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /></svg>
               LINEで友だち追加（無料）
@@ -86,9 +86,9 @@ function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => vo
               <div className="ky-qr-cap">友だち追加用<br />QRコード</div>
             </div>
             <ul className="ky-gate-benefits">
-              <li>急落を見つけたら、すぐLINEに通知</li>
-              <li>全レース・全会場がずっと無料</li>
-              <li>いつでもブロックで解除OK</li>
+              <li>全レース・全会場の急変ボードが見放題</li>
+              <li>オッズくん指数・本命急落もぜんぶ無料</li>
+              <li>いつでも解除OK</li>
             </ul>
             <button className="ky-gate-skip" onClick={onEnter}>デモ：登録せずに中を見る</button>
             <p className="ky-gate-fine">情報提供サービスであり、的中・利益を保証するものではありません。</p>
@@ -240,14 +240,36 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
     (filter === "all" || s.type === filter) && (venue === "all" || s.venue === venue)
   ), [signals, filter, venue]);
 
+  // 右下オッズくん: 急落/急騰のシグナルを巡回して吹き出し表示(賑わい演出)
   const [react, setReact] = useState(false);
+  const [spot, setSpot] = useState<Sig | null>(null);
+  const spotIdx = useRef(0);
+  const spotlightPool = useMemo(
+    () => signals.filter((s) => s.type === "drop" || s.type === "surge"),
+    [signals]
+  );
+  useEffect(() => {
+    if (!spotlightPool.length) { setSpot(null); setReact(false); return; }
+    let alive = true;
+    let hideT: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      if (!alive) return;
+      const s = spotlightPool[spotIdx.current % spotlightPool.length];
+      spotIdx.current += 1;
+      setSpot(s);
+      setReact(true);
+      hideT = setTimeout(() => { if (alive) setReact(false); }, 2800);
+    };
+    tick();
+    const id = setInterval(tick, 5200);
+    return () => { alive = false; clearInterval(id); clearTimeout(hideT); };
+  }, [spotlightPool]);
+  // 本当の新着が来たら割り込んで表示
   useEffect(() => {
     if (!freshId) return;
-    setReact(true);
-    const t = setTimeout(() => setReact(false), 2600);
-    return () => clearTimeout(t);
-  }, [freshId]);
-  const freshSignal = signals.find((s) => s.id === freshId);
+    const fs = signals.find((s) => s.id === freshId);
+    if (fs) { setSpot(fs); setReact(true); }
+  }, [freshId, signals]);
 
   const onOpen = (id: string) => nav({ screen: "race", raceId: id });
 
@@ -310,10 +332,11 @@ export function BoardScreen({ now, signals, nav, freshId }: { now: number; signa
       </div>
 
       <div className={`ky-watcher ${react ? "is-react" : ""}`} style={S({ "--ms": MASCOT_SCALE })}>
-        {react && freshSignal && (
+        {react && spot && (
           <div className="ky-watcher-bubble">
-            <b style={{ color: SIGNAL_META[freshSignal.type].varc }}>{SIGNAL_META[freshSignal.type].label}</b>キャッチ！<br />
-            <span className="nums">{freshSignal.venue}{freshSignal.raceNumber}R</span>
+            <b style={{ color: SIGNAL_META[spot.type].varc }}>{SIGNAL_META[spot.type].arrow}{SIGNAL_META[spot.type].label}</b>みっけ！<br />
+            <span className="nums">{spot.venue}{spot.raceNumber}R {spot.horseNumber}番</span>
+            <span className="nums" style={{ color: SIGNAL_META[spot.type].varc, marginLeft: 6 }}>{fmtPct(spot.changePct)}</span>
           </div>
         )}
         <Mascot size={64 * MASCOT_SCALE} mood={react ? "alert" : "idle"} color={MASCOT_COLOR} glow={false} />
