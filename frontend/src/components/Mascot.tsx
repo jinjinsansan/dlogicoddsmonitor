@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 
-// 急落くん マスコット（pico = ピン型ディテクター, 出荷既定）。幾何学SVG。
+// オッズくん マスコット（pico = ピン型ディテクター, 出荷既定）。幾何学SVG。
 function shade(hex: string, amt: number) {
   const n = parseInt(hex.replace("#", ""), 16);
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
@@ -69,7 +69,7 @@ export function Mascot({ size = 160, mood = "idle", color = "#00E5FF", idle = tr
   return (
     <svg width={size} height={size * 1.18} viewBox="0 0 200 236"
       className={`ky-mascot ${idle ? "ky-float" : ""} ${mood === "alert" ? "ky-alert" : ""}`}
-      style={{ overflow: "visible", display: "block" }} role="img" aria-label="急落くん">
+      style={{ overflow: "visible", display: "block" }} role="img" aria-label="オッズくん">
       <Defs uid={uid} color={color} />
       {glow && <ellipse cx="100" cy="120" rx="94" ry="98" fill={`url(#${uid}-g)`} className="ky-aura" />}
       <line x1="100" y1="34" x2="100" y2="14" stroke={dark} strokeWidth="5" strokeLinecap="round" />

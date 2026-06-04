@@ -21,7 +21,7 @@ function AppHeader({ now, nav, children }: { now: number; nav: Nav; children?: R
       <div className="ky-appbar-in">
         <button className="ky-brand" onClick={() => nav({ screen: "lp" })}>
           <MascotMark size={30} color={MASCOT_COLOR} />
-          <span className="ky-wordmark">オッズ<span className="ky-wm-accent">急落</span>くん</span>
+          <span className="ky-wordmark"><span className="ky-wm-accent">急騰急落</span>オッズくん</span>
         </button>
         <div className="ky-appbar-r">
           <span className="nums ky-clock">{fmtClock(now)}</span>
@@ -65,7 +65,7 @@ function LineGate({ open, onClose, onEnter }: { open: boolean; onClose: () => vo
           <div className="ky-gate-done">
             <Mascot size={96} mood="happy" color={MASCOT_COLOR} idle glow />
             <h3 className="ky-gate-title">友だち追加、ありがとう！</h3>
-            <p className="ky-gate-sub">急変を見つけたら、急落くんがLINEでお知らせします。さっそく今の相場を見てみましょう。</p>
+            <p className="ky-gate-sub">急変を見つけたら、オッズくんがLINEでお知らせします。さっそく今の相場を見てみましょう。</p>
             <button className="ky-btn ky-btn-cta ky-gate-go" onClick={onEnter}>ボードを見る →</button>
           </div>
         ) : (
@@ -128,7 +128,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
       <nav className="ky-lp-nav">
         <div className="ky-brand">
           <MascotMark size={32} color={MASCOT_COLOR} />
-          <span className="ky-wordmark">オッズ<span className="ky-wm-accent">急落</span>くん</span>
+          <span className="ky-wordmark"><span className="ky-wm-accent">急騰急落</span>オッズくん</span>
         </div>
         <div className="ky-lp-nav-r">
           <button className="ky-link" onClick={openGate}>ボード</button>
@@ -145,7 +145,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
           <h1 className="ky-hero-h1">オッズは、<br /><span className="ky-grad">嘘をつかない。</span></h1>
           <p className="ky-hero-sub">
             JRA全レースのオッズをリアルタイム監視。<br />
-            直前で<b>急落した馬＝賢い金が入った馬</b>を、急落くんが見つけます。
+            直前で<b>急落・急騰した馬＝賢い金の動き</b>を、オッズくんが見つけます。
           </p>
           <div className="ky-hero-cta">
             <button className="ky-btn ky-btn-cta" onClick={openGate}>無料で今すぐ見る</button>
@@ -161,7 +161,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
         <div className="ky-hero-stage">
           <div className="ky-hero-mascot" style={S({ "--ms": MASCOT_SCALE })}>
             <Mascot size={150 * MASCOT_SCALE} mood="idle" color={MASCOT_COLOR} />
-            <div className="ky-speech">急落、見つけたよ！</div>
+            <div className="ky-speech">急変、見つけたよ！</div>
           </div>
           <div className="ky-glass ky-miniboard">
             <div className="ky-miniboard-h">
@@ -208,7 +208,7 @@ export function LandingScreen({ now, signals, nav }: { now: number; signals: Sig
         <button className="ky-btn ky-btn-cta" onClick={openGate}>LINEで無料登録して見る</button>
       </section>
 
-      <footer className="ky-footer">オッズ急落くん β — JRAオッズ急変の可視化 / 情報・エンタメ目的</footer>
+      <footer className="ky-footer">急騰急落オッズくん β — JRAオッズ急変の可視化</footer>
 
       <LineGate open={gate} onClose={() => setGate(false)} onEnter={enterBoard} />
     </div>
