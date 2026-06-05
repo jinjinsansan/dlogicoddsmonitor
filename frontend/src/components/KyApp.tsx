@@ -22,6 +22,19 @@ export default function KyApp({ initialBoard, initialRoute, nowInit }:
   useEffect(() => {
     let reg = false;
     try { reg = localStorage.getItem(REG_KEY) === "1"; } catch { reg = false; }
+    // LINEログイン成功(コールバックが ky_auth クッキー + ?login=1 を付与)
+    const loggedInCookie = typeof document !== "undefined" && /(^|;\s*)ky_auth=1/.test(document.cookie);
+    const sp = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
+    if (sp.get("login") === "1" || loggedInCookie) {
+      reg = true;
+      try { localStorage.setItem(REG_KEY, "1"); } catch { /* noop */ }
+      if (sp.get("login")) {
+        try { history.replaceState({}, "", location.pathname); } catch { /* noop */ }
+      }
+    } else if (sp.get("login") === "error") {
+      try { history.replaceState({}, "", location.pathname); } catch { /* noop */ }
+      setTimeout(() => alert("LINEログインに失敗しました。お手数ですが、もう一度お試しください。"), 100);
+    }
     setRegistered(reg);
   }, []);
 

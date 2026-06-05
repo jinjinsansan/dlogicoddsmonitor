@@ -61,56 +61,31 @@ function makeQR(seed: number, n: number) {
   return g;
 }
 
-// LINE友だち追加URL(未設定ならデモ用 # )
-const LINE_ADD_URL = process.env.NEXT_PUBLIC_LINE_ADD_URL || "";
-
-// LINE登録ゲート(必須・スキップ不可)。onRegistered で「中を見る」=登録完了。
+// LINE登録ゲート(必須)。LINEログイン(OAuth)＝ログインと同時に友だち追加(bot_prompt=aggressive)。
 // forced=true(直リンクでブロック中)のときは × で閉じてもLPに戻るだけ。
-export function LineGate({ open, forced, onClose, onRegistered }:
-  { open: boolean; forced?: boolean; onClose: () => void; onRegistered: () => void }) {
-  const [done, setDone] = useState(false);
-  useEffect(() => { if (!open) setDone(false); }, [open]);
-  const N = 21;
-  const grid = useMemo(() => makeQR(987654, N), []);
+export function LineGate({ open, forced, onClose }:
+  { open: boolean; forced?: boolean; onClose: () => void; onRegistered?: () => void }) {
   if (!open) return null;
-  const addFriend = () => { if (LINE_ADD_URL) window.open(LINE_ADD_URL, "_blank"); setDone(true); };
+  const login = () => { window.location.href = "/api/auth/line/login"; };
   return (
     <div className="ky-gate" role="dialog" aria-modal="true">
       <div className="ky-gate-backdrop" onClick={onClose} />
       <div className="ky-gate-card">
         <button className="ky-gate-x" onClick={onClose} aria-label="閉じる">×</button>
-        {done ? (
-          <div className="ky-gate-done">
-            <Mascot size={96} mood="happy" color={MASCOT_COLOR} idle glow />
-            <h3 className="ky-gate-title">友だち追加、ありがとう！</h3>
-            <p className="ky-gate-sub">さっそく今の相場を見てみよう。急変ボードはぜんぶ無料で見放題だよ。</p>
-            <button className="ky-btn ky-btn-cta ky-gate-go" onClick={onRegistered}>中を見る →</button>
-          </div>
-        ) : (
-          <>
-            <div className="ky-gate-mascot"><Mascot size={78} mood="happy" color={MASCOT_COLOR} idle glow={false} /></div>
-            <h3 className="ky-gate-title">LINEで友だち追加して<br /><span className="ky-gate-free">無料で見放題</span></h3>
-            <p className="ky-gate-sub">急変ボード・オッズくん指数・本命急落のすべてを見るには、LINEの友だち追加が必要です（無料・10秒）。</p>
-            <button className="ky-line-btn" onClick={addFriend}>
-              <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C6.9 3 2.75 6.35 2.75 10.5c0 3.72 3.3 6.84 7.78 7.43.3.06.71.2.81.45.09.23.06.59.03.82l-.13.79c-.04.23-.18.91.8.5 .98-.42 5.3-3.12 7.23-5.34 1.33-1.46 1.97-2.95 1.97-4.65C21.25 6.35 17.1 3 12 3Z" /><rect x="6.4" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /><rect x="15.6" y="9" width="1.5" height="4" rx=".5" fill="#06C755" /></svg>
-              LINEで友だち追加（無料）
-            </button>
-            <div className="ky-gate-or"><span>または スマホで読み取り</span></div>
-            <div className="ky-gate-qr">
-              <div className="ky-qr" style={{ gridTemplateColumns: `repeat(${N},1fr)` }}>
-                {grid.flatMap((row, r) => row.map((on, c) => <i key={r + "-" + c} className={on ? "on" : ""} />))}
-              </div>
-              <div className="ky-qr-cap">友だち追加用<br />QRコード</div>
-            </div>
-            <ul className="ky-gate-benefits">
-              <li>全レース・全会場の急変ボードが見放題</li>
-              <li>オッズくん指数・本命急落もぜんぶ無料</li>
-              <li>いつでも解除OK</li>
-            </ul>
-            <button className="ky-gate-skip" onClick={onClose}>{forced ? "トップに戻る" : "あとで"}</button>
-            <p className="ky-gate-fine">情報提供サービスであり、的中・利益を保証するものではありません。</p>
-          </>
-        )}
+        <div className="ky-gate-mascot"><Mascot size={84} mood="happy" color={MASCOT_COLOR} idle glow={false} /></div>
+        <h3 className="ky-gate-title">LINEではじめる<br /><span className="ky-gate-free">無料で見放題</span></h3>
+        <p className="ky-gate-sub">急変ボード・オッズくん指数・本命急落のすべてを見るには、LINEログインが必要です。<b>ログインと同時に友だち追加</b>されます（無料・10秒）。</p>
+        <button className="ky-line-btn" onClick={login}>
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C6.9 3 2.75 6.35 2.75 10.5c0 3.72 3.3 6.84 7.78 7.43.3.06.71.2.81.45.09.23.06.59.03.82l-.13.79c-.04.23-.18.91.8.5 .98-.42 5.3-3.12 7.23-5.34 1.33-1.46 1.97-2.95 1.97-4.65C21.25 6.35 17.1 3 12 3Z" /></svg>
+          LINEでログイン（友だち追加）
+        </button>
+        <ul className="ky-gate-benefits">
+          <li>全レース・全会場の急変ボードが見放題</li>
+          <li>オッズくん指数・本命急落もぜんぶ無料</li>
+          <li>友だち追加はいつでも解除OK</li>
+        </ul>
+        <button className="ky-gate-skip" onClick={onClose}>{forced ? "トップに戻る" : "あとで"}</button>
+        <p className="ky-gate-fine">情報提供サービスであり、的中・利益を保証するものではありません。</p>
       </div>
     </div>
   );
