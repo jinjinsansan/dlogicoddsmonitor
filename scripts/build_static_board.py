@@ -122,6 +122,130 @@ def save_json(p, obj):
     os.replace(tmp, p)
 
 
+# ---------- odds_rt(PC-KEIBAリアルタイム)からシグナル算出 ----------
+# netkeibaの前売り(1時間凍結)に代えて、JRA-VAN速報オッズ(分単位)からシグナルを導出。
+# 基準=最古の速報(発走30〜60分前)、最新=末尾の確定間際。閾値は監視(detection)と同じ。
+RT_DROP_PCT = -20.0
+RT_SURGE_PCT = 30.0
+RT_MIN_ODDS = 2.0
+RT_MAX_ODDS = 200.0
+_RT_CACHE = {}
+
+
+def rt_series(race_id):
+    """odds_rt の時系列 [{t, odds{num:odds}}] を昇順で返す(1run キャッシュ)。"""
+    if race_id in _RT_CACHE:
+        return _RT_CACHE[race_id]
+    rows = (c.table("odds_rt").select("snapshot_at,odds_data")
+            .eq("race_id", race_id).order("snapshot_at", desc=False).limit(400).execute().data) or []
+    series = []
+    for r in rows:
+        od = r.get("odds_data")
+        if isinstance(od, str):
+            try:
+                od = json.loads(od)
+            except Exception:
+                od = {}
+        series.append({"t": r.get("snapshot_at"), "odds": od or {}})
+    _RT_CACHE[race_id] = series
+    return series
+
+
+def _rank_top(od):
+    items = []
+    for n, o in od.items():
+        try:
+            ov = float(o)
+        except Exception:
+            continue
+        if ov > 0:
+            items.append((n, ov))
+    items.sort(key=lambda x: x[1])
+    return [n for n, _ in items]
+
+
+def rt_signals(race_id):
+    """odds_rt から急落/急騰/逆転シグナルの生row(odds_signals互換)を算出。"""
+    series = rt_series(race_id)
+    if len(series) < 2:
+        return []
+    base, last = series[0]["odds"], series[-1]["odds"]
+    notified = series[-1]["t"]
+    venue = venue_of(race_id, "")
+    rno = int(str(race_id)[10:12]) if str(race_id)[10:12].isdigit() else 0
+    out = []
+    for k, lv in last.items():
+        try:
+            lo = float(lv); bo = float(base.get(k) or 0)
+        except Exception:
+            continue
+        if bo <= 0 or lo <= 0:
+            continue
+        if bo < RT_MIN_ODDS and lo < RT_MIN_ODDS:
+            continue
+        if bo > RT_MAX_ODDS and lo > RT_MAX_ODDS:
+            continue
+        pct = (lo - bo) / bo * 100.0
+        stype = "drop" if pct <= RT_DROP_PCT else ("surge" if pct >= RT_SURGE_PCT else None)
+        if not stype:
+            continue
+        out.append({
+            "id": f"rt:{race_id}:{k}:{stype}", "race_id": race_id,
+            "venue": venue, "race_number": rno, "signal_type": stype,
+            "horse_number": int(k) if str(k).isdigit() else k,
+            "detail": {"prev_odds": bo, "curr_odds": lo, "change_pct": round(pct, 1)},
+            "race_date": None, "notified_at": notified,
+        })
+    # 逆転(1番人気の入替)
+    br, lr = _rank_top(base), _rank_top(last)
+    if br and lr and br[0] != lr[0]:
+        old_fav, new_fav = br[0], lr[0]
+        out.append({
+            "id": f"rt:{race_id}:{new_fav}:reversal", "race_id": race_id,
+            "venue": venue, "race_number": rno, "signal_type": "reversal",
+            "horse_number": int(new_fav) if str(new_fav).isdigit() else new_fav,
+            "detail": {
+                "old_favorite": int(old_fav) if str(old_fav).isdigit() else old_fav,
+                "new_favorite": int(new_fav) if str(new_fav).isdigit() else new_fav,
+                "new_fav_odds_prev": float(base.get(new_fav) or 0),
+                "new_fav_odds_curr": float(last.get(new_fav) or 0),
+            },
+            "race_date": None, "notified_at": notified,
+        })
+    return out
+
+
+def race_signal_rows(race_id):
+    """シグナル生row。odds_rt(リアルタイム)を優先し、時系列が無いレースは
+    旧 odds_signals(netkeiba)へフォールバック(移行期/feeder未稼働時の保険)。"""
+    if len(rt_series(race_id)) >= 2:
+        return rt_signals(race_id)
+    return (c.table("odds_signals")
+            .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
+            .eq("race_id", race_id).order("notified_at", desc=True).execute().data) or []
+
+
+def load_race_names(race_ids):
+    """race_names(PC-KEIBA)から {race_id: {umaban: {name,jockey}}} を取得。
+    odds_rt の umaban と整合する正しい馬番↔馬名(netkeiba出馬表は番号がズレる)。"""
+    out = {}
+    ids = list(race_ids)
+    for i in range(0, len(ids), 50):
+        chunk = ids[i:i + 50]
+        rows = (c.table("race_names").select("race_id,names")
+                .in_("race_id", chunk).execute().data) or []
+        for r in rows:
+            nm = r.get("names")
+            if isinstance(nm, str):
+                try:
+                    nm = json.loads(nm)
+                except Exception:
+                    nm = {}
+            if nm:
+                out[r["race_id"]] = nm
+    return out
+
+
 # ---------- レース表(サブプロセス) ----------
 def get_race_list(date_str: str) -> list:
     try:
@@ -256,19 +380,20 @@ def cap_race_signals(sl, n_drop=3, n_surge=2):
     return drops + surges + revs
 
 
-def build_signals_for_date(target_iso, entries_cache, scores):
-    rows = (c.table("odds_signals")
-            .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
-            .in_("venue", JRA_VENUES).eq("race_date", target_iso)
-            .order("notified_at", desc=True).limit(3000).execute().data) or []
-    seen, by_race = set(), {}
-    for row in rows:
-        key = f"{row['race_id']}:{row['horse_number']}:{row['signal_type']}"
-        if key in seen:
+def build_signals_for_date(race_ids, entries_cache, scores):
+    """対象日の全レース(race_ids)から odds_rt 由来シグナルを集約(レース毎に厳選)。"""
+    by_race = {}
+    for rid in race_ids:
+        if venue_of(rid, "") not in JRA_VENUES:
             continue
-        seen.add(key)
-        sig = sig_from_row(row, entries_cache.get(row["race_id"]), scores)
-        by_race.setdefault(row["race_id"], []).append(sig)
+        seen = set()
+        for row in race_signal_rows(rid):
+            key = f"{row['race_id']}:{row['horse_number']}:{row['signal_type']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            sig = sig_from_row(row, entries_cache.get(rid), scores)
+            by_race.setdefault(rid, []).append(sig)
     out = []
     for sl in by_race.values():
         out.extend(cap_race_signals(sl))  # レースごとに 急落3・急騰2・逆転 へ圧縮
@@ -277,28 +402,27 @@ def build_signals_for_date(target_iso, entries_cache, scores):
     return out[:BOARD_LIMIT]
 
 
-def day_signal_summary(target_iso, entries_cache, scores):
+def day_signal_summary(race_ids, entries_cache, scores):
     """その日の全シグナルをレース別に集計(急落/急騰/逆転数・本命有無)。"""
-    rows = (c.table("odds_signals")
-            .select("race_id,signal_type,horse_number")
-            .in_("venue", JRA_VENUES).eq("race_date", target_iso)
-            .limit(5000).execute().data) or []
-    seen = set()
     summ = {}
-    for r in rows:
-        rid, hn, st = r["race_id"], r["horse_number"], r["signal_type"]
-        key = f"{rid}:{hn}:{st}"
-        if key in seen:
+    for rid in race_ids:
+        if venue_of(rid, "") not in JRA_VENUES:
             continue
-        seen.add(key)
-        s = summ.setdefault(rid, {"drop": 0, "surge": 0, "reversal": 0, "honmei": False})
-        if st in s:
-            s[st] += 1
-        if st == "drop":
-            nm = ((entries_cache.get(rid) or {}).get(str(hn)) or {}).get("name")
-            sc = scores.get(nm) if nm else None
-            if sc is not None and sc >= HONMEI_MIN:
-                s["honmei"] = True
+        seen = set()
+        for r in race_signal_rows(rid):
+            rid_, hn, st = r["race_id"], r["horse_number"], r["signal_type"]
+            key = f"{rid_}:{hn}:{st}"
+            if key in seen:
+                continue
+            seen.add(key)
+            s = summ.setdefault(rid_, {"drop": 0, "surge": 0, "reversal": 0, "honmei": False})
+            if st in s:
+                s[st] += 1
+            if st == "drop":
+                nm = ((entries_cache.get(rid_) or {}).get(str(hn)) or {}).get("name")
+                sc = scores.get(nm) if nm else None
+                if sc is not None and sc >= HONMEI_MIN:
+                    s["honmei"] = True
     return summ
 
 
@@ -330,15 +454,19 @@ def build_races(races_list, summary, entries_cache, scores):
 
 
 def build_race(race_id, entries, scores):
-    sig_rows = (c.table("odds_signals")
-                .select("id,race_id,venue,race_number,signal_type,horse_number,detail,race_date,notified_at")
-                .eq("race_id", race_id).order("notified_at", desc=True).execute().data) or []
-    snap_rows = (c.table("odds_snapshots")
-                 .select("snapshot_at,odds_data,venue,race_number")
-                 .eq("race_id", race_id).order("snapshot_at", desc=False).limit(300).execute().data) or []
+    # シグナル=odds_rt優先(無ければodds_signalsフォールバック)、チャート=odds_rtの時系列
+    sig_rows = race_signal_rows(race_id)
+    series = rt_series(race_id)
+    snap_rows = [{"snapshot_at": s["t"], "odds_data": s["odds"]} for s in series]
+    if len(snap_rows) < 2:
+        # odds_rt が無いレースは旧 odds_snapshots(netkeiba)でチャート描画
+        snap_rows = (c.table("odds_snapshots")
+                     .select("snapshot_at,odds_data,venue,race_number")
+                     .eq("race_id", race_id).order("snapshot_at", desc=False).limit(300).execute().data) or []
 
-    venue = venue_of(race_id, (sig_rows[0]["venue"] if sig_rows else "") or (snap_rows[0]["venue"] if snap_rows else ""))
-    race_number = (sig_rows[0]["race_number"] if sig_rows else 0) or (snap_rows[0]["race_number"] if snap_rows else 0)
+    venue = venue_of(race_id, (sig_rows[0].get("venue") if sig_rows else "") or (snap_rows[0].get("venue") if snap_rows else ""))
+    rno_str = str(race_id)[10:12]
+    race_number = (sig_rows[0].get("race_number") if sig_rows else 0) or (snap_rows[0].get("race_number") if snap_rows else 0) or (int(rno_str) if rno_str.isdigit() else 0)
 
     horses, snap_times = [], []
     if snap_rows:
@@ -445,6 +573,11 @@ def main():
 
     ensure_entries(race_ids, entries_cache)
 
+    # PC-KEIBA(race_names)で 馬番↔馬名 を上書き(odds_rt の umaban と整合させる)。
+    # netkeiba出馬表は馬番がズレるため、PC-KEIBAがある races はそちらを正とする。
+    for rid, nm in load_race_names(race_ids).items():
+        entries_cache[rid] = nm
+
     names = []
     for rid in race_ids:
         for info in (entries_cache.get(rid) or {}).values():
@@ -453,8 +586,8 @@ def main():
                 names.append(nm)
     scores = run_scoring(names)
 
-    signals = build_signals_for_date(target_iso, entries_cache, scores) if mode in ("live", "finished") else []
-    summary = day_signal_summary(target_iso, entries_cache, scores)
+    signals = build_signals_for_date(race_ids, entries_cache, scores) if mode in ("live", "finished") else []
+    summary = day_signal_summary(race_ids, entries_cache, scores)
     races_cards = build_races(races_list, summary, entries_cache, scores)
 
     live_start_ms = int(datetime.combine(target, datetime.min.time(), JST).replace(hour=LIVE_HOUR).timestamp() * 1000)

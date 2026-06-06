@@ -48,7 +48,7 @@ RACES_TODAY = os.path.join(DATA, "races_today.json")
 ENTRIES_CACHE = os.path.join(DATA, "race_entries_full.json")
 VAPID_SUB = "mailto:goldbenchan@gmail.com"
 SITE = "https://www.oddskun.com"
-ALERT_MAX_MIN = 5   # 発走まで何分以内で発火するか(≒4分前)
+ALERT_MAX_MIN = 3   # 発走まで何分以内で発火するか(直前の速報オッズを掴むため発走寄りに)
 
 c = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
@@ -91,7 +91,9 @@ def race_list_today(now):
 
 
 def biggest_drop(race_id, post_epoch):
-    rows = (c.table("odds_snapshots").select("snapshot_at,odds_data")
+    # 算出元 = PC-KEIBA(JRA-VAN)由来の速報オッズ odds_rt。
+    # netkeibaの前売りAPIは発走直前まで凍結し「直前急落」が取れないため切替済。
+    rows = (c.table("odds_rt").select("snapshot_at,odds_data")
             .eq("race_id", race_id).order("snapshot_at", desc=False).limit(300).execute().data) or []
     if len(rows) < 2:
         return None
@@ -118,6 +120,58 @@ def biggest_drop(race_id, post_epoch):
             if pct < 0 and (best is None or pct < best["pct"]):
                 best = {"num": int(k) if str(k).lstrip("-").isdigit() else k, "base": bo, "last": lo, "pct": round(pct, 1)}
     return best
+
+
+_NAMES_CACHE = {}
+
+
+def race_names_of(race_id):
+    """race_names(PC-KEIBA由来)から 馬番→{name,jockey} を取得(1run内キャッシュ)。"""
+    if race_id in _NAMES_CACHE:
+        return _NAMES_CACHE[race_id]
+    try:
+        rows = (c.table("race_names").select("names")
+                .eq("race_id", race_id).limit(1).execute().data) or []
+        names = (rows[0].get("names") if rows else {}) or {}
+        if isinstance(names, str):
+            names = json.loads(names)
+    except Exception:
+        names = {}
+    _NAMES_CACHE[race_id] = names
+    return names
+
+
+def vote_inflow(race_id, num, post_epoch):
+    """votes_rt から馬num の直前資金流入(票数増・円)を算出。(inflow_votes, yen) or None。
+
+    1票=100円。基準=発走30分前に最も近い票数、最新=末尾。純増のみ返す。
+    """
+    rows = (c.table("votes_rt").select("snapshot_at,votes")
+            .eq("race_id", race_id).order("snapshot_at", desc=False).limit(300).execute().data) or []
+    if len(rows) < 2:
+        return None
+
+    def vd(r):
+        v = r.get("votes")
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except Exception:
+                v = {}
+        return v or {}
+
+    target = post_epoch - 1800
+    base_row = min(rows, key=lambda r: abs(to_epoch(r["snapshot_at"]) - target))
+    base, last = vd(base_row), vd(rows[-1])
+    k = str(num)
+    try:
+        bv = int(base.get(k) or 0); lv = int(last.get(k) or 0)
+    except Exception:
+        return None
+    inflow = lv - bv
+    if inflow <= 0:
+        return None
+    return inflow, inflow * 100
 
 
 def main():
@@ -150,12 +204,26 @@ def main():
             continue
         best = biggest_drop(rid, post_dt.timestamp())
         if not best:
-            sent[rid] = now.isoformat(); save_json(SENT, sent); continue
-        name = ((entries.get(rid) or {}).get(str(best["num"])) or {})
-        nm = name.get("name") if isinstance(name, dict) else (name or f"{best['num']}番")
+            # まだ急落が出ていない/速報オッズ未到達 → sentに記録せず次のcronで再試行
+            # (旧実装はここでsent記録し永久スキップ＝無通知の原因だった)
+            continue
+        # 馬名 = PC-KEIBA(jvd_se)由来の race_names を優先(オッズと馬番が一致)。
+        # 無ければ netkeiba出馬表キャッシュ(番号ズレあり)→最後は馬番のみ。
+        nm = (race_names_of(rid).get(str(best["num"])) or {}).get("name") or ""
+        if not nm:
+            ne = ((entries.get(rid) or {}).get(str(best["num"])) or {})
+            nm = (ne.get("name") if isinstance(ne, dict) else ne) or ""
+        horse = f"{best['num']}番" + (f" {nm}" if nm else "")
+        # 資金流入(票数)= 急落の"原因"。JRA-VAN票数があるレースのみ付与。
+        money = ""
+        vi = vote_inflow(rid, best["num"], post_dt.timestamp())
+        if vi:
+            votes_in, yen = vi
+            money = (f"｜資金+{votes_in:,}票(約{yen // 10000}万円)"
+                     if yen >= 10000 else f"｜資金+{votes_in:,}票")
         payload = json.dumps({
             "title": f"{venue_of(rid, r.get('venue',''))}{r.get('race_number','')}R まもなく発走",
-            "body": f"直前で最も急落：{best['num']}番 {nm}　{best['base']:.1f}→{best['last']:.1f}倍 ({best['pct']}%)",
+            "body": f"直前で最も急落：{horse}　{best['base']:.1f}→{best['last']:.1f}倍 ({best['pct']}%){money}",
             "url": f"{SITE}/race/{rid}",
             "tag": f"ky-{rid}",
         }, ensure_ascii=False)
@@ -181,7 +249,7 @@ def main():
                 pass
         sent[rid] = now.isoformat()
         save_json(SENT, sent)
-        print(f"[{now.isoformat()}] sent {rid} {r.get('venue')}{r.get('race_number')}R -> {ok}/{len(rsubs)} ({best['num']}番 {nm} {best['pct']}%)", flush=True)
+        print(f"[{now.isoformat()}] sent {rid} {venue_of(rid, r.get('venue',''))}{r.get('race_number')}R -> {ok}/{len(rsubs)} ({best['num']}番 {nm} {best['pct']}%{money})", flush=True)
 
 
 if __name__ == "__main__":
