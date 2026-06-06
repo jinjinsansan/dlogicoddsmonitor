@@ -248,10 +248,26 @@ def load_race_names(race_ids):
 
 # ---------- レース表(サブプロセス) ----------
 def get_race_list(date_str: str) -> list:
+    races = []
     try:
         r = subprocess.run([ODDS_PY, LIST_SCRIPT, date_str], capture_output=True, text=True, timeout=120)
         out = (r.stdout or "").strip()
-        return json.loads(out) if out else []
+        races = json.loads(out) if out else []
+    except Exception:
+        races = []
+    if races:
+        return races
+    # netkeibaのレース一覧は開催日が近づくまで取れない → PC-KEIBA(races_rt)へフォールバック
+    iso = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+    try:
+        rows = (c.table("races_rt")
+                .select("race_id,venue,race_number,post_time,race_name")
+                .eq("race_date", iso).order("post_time").execute().data) or []
+        return [{
+            "race_id": x["race_id"], "race_number": x.get("race_number") or 0,
+            "race_name": x.get("race_name") or "", "venue": x.get("venue") or "",
+            "post_time": x.get("post_time") or "", "race_type": "jra",
+        } for x in rows]
     except Exception:
         return []
 

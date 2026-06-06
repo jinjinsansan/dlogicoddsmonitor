@@ -80,13 +80,25 @@ def to_epoch(iso):
 def race_list_today(now):
     ds = now.strftime("%Y%m%d")
     cache = load_json(RACES_TODAY, {})
-    if cache.get("date") == ds:
-        return cache.get("races", [])
+    if cache.get("date") == ds and cache.get("races"):
+        return cache["races"]
     try:
         races = fetch_jra_race_list(ds) or []
     except Exception:
         races = []
-    save_json(RACES_TODAY, {"date": ds, "races": races})
+    if not races:
+        # netkeibaのレース一覧は開催日が近づくまで取れない → PC-KEIBA(races_rt)へフォールバック
+        iso = f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}"
+        try:
+            rows = (c.table("races_rt").select("race_id,venue,race_number,post_time")
+                    .eq("race_date", iso).execute().data) or []
+            races = [{"race_id": x["race_id"], "race_number": x.get("race_number") or 0,
+                      "venue": x.get("venue") or "", "post_time": x.get("post_time") or "",
+                      "race_type": "jra"} for x in rows]
+        except Exception:
+            races = []
+    if races:  # 空はキャッシュしない(後で取れたら反映させる)
+        save_json(RACES_TODAY, {"date": ds, "races": races})
     return races
 
 

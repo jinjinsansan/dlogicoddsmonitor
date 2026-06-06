@@ -40,6 +40,8 @@ PCKEIBA = {
 
 # jvd_o1.keibajo_code は JRA トラックコード(netkeiba race_id 5-6桁目と同一)
 JRA_CODES = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "10"}
+VENUE_BY_CODE = {"01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京",
+                 "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉"}
 
 # --- PC-KEIBA 起動忘れ検知 → Telegram通知 ---
 # PostgreSQLは常駐サービスなので接続では起動忘れを検知できない。リアルタイム受信を担う
@@ -246,6 +248,20 @@ def main():
     )
     vote_rows = cur.fetchall()
 
+    # レース表 (jvd_ra: 当日+翌日。netkeibaのレース一覧APIは開催日が近づくまで取れないため、
+    # PC-KEIBA(週末カードを事前保持)から会場/R/発走時刻を供給し preview を確実に出す)
+    ra_dates = [now.strftime("%Y%m%d"), (now + timedelta(days=1)).strftime("%Y%m%d")]
+    cur.execute(
+        """
+        select kaisai_nen, kaisai_tsukihi, keibajo_code, kaisai_kai, kaisai_nichime,
+               race_bango, hasso_jikoku, kyosomei_hondai, kyosomei_ryakusho_10
+        from jvd_ra
+        where (kaisai_nen || kaisai_tsukihi) = any(%s)
+        """,
+        (ra_dates,),
+    )
+    race_rows = cur.fetchall()
+
     cur.close(); conn.close()
 
     payload = []
@@ -298,6 +314,29 @@ def main():
         except Exception as e:
             print(f"WARN: votes_rt upsert 失敗: {e}", file=sys.stderr)
 
+    # レース表を races_rt へ upsert (当日+翌日。preview/番組表をnetkeiba非依存に)
+    race_payload = []
+    for r_nen, r_tsukihi, code, kai, nichime, bango, hasso, hondai, ryaku in race_rows:
+        if code not in JRA_CODES:
+            continue
+        rid = f"{r_nen}{code}{int(kai):02d}{int(nichime):02d}{int(bango):02d}"
+        hh = (str(hasso).strip() if hasso is not None else "")
+        post = f"{hh[:2]}:{hh[2:4]}" if len(hh) >= 4 and hh[:4].isdigit() else ""
+        rnm = (str(hondai).strip() if hondai else "") or (str(ryaku).strip() if ryaku else "")
+        race_payload.append({
+            "race_id": rid,
+            "race_date": f"{r_nen}-{r_tsukihi[:2]}-{r_tsukihi[2:]}",
+            "venue": VENUE_BY_CODE.get(code, ""),
+            "race_number": int(bango) if str(bango).isdigit() else None,
+            "post_time": post,
+            "race_name": rnm,
+        })
+    if race_payload:
+        try:
+            sb.table("races_rt").upsert(race_payload, on_conflict="race_id").execute()
+        except Exception as e:
+            print(f"WARN: races_rt upsert 失敗: {e}", file=sys.stderr)
+
     # 馬名マップを race_names へ upsert (馬名は不変なので race_id ごと1行)
     if names_by_race:
         name_payload = [
@@ -310,7 +349,7 @@ def main():
 
     if not payload:
         if args.verbose:
-            print(f"[{now:%H:%M:%S}] {date_str}: 対象オッズなし (馬名{len(names_by_race)}R)")
+            print(f"[{now:%H:%M:%S}] {date_str}: 対象オッズなし (馬名{len(names_by_race)}R / レース表{len(race_payload)})")
         return 0
 
     try:
@@ -323,7 +362,7 @@ def main():
         kubuns = {}
         for p in payload:
             kubuns[p["data_kubun"]] = kubuns.get(p["data_kubun"], 0) + 1
-        print(f"[{now:%H:%M:%S}] upsert odds {len(payload)}件 {kubuns} / 票数 {len(vote_payload)}R / 馬名 {len(names_by_race)}R")
+        print(f"[{now:%H:%M:%S}] upsert odds {len(payload)}件 {kubuns} / 票数 {len(vote_payload)}R / 馬名 {len(names_by_race)}R / レース表 {len(race_payload)}")
     return 0
 
 
