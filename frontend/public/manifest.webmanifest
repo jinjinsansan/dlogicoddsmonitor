@@ -1,9 +1,15 @@
 {
+  "id": "/",
   "name": "急騰急落オッズくん",
   "short_name": "オッズくん",
   "description": "JRAオッズの急変をリアルタイムで。",
+  "lang": "ja",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
+  "categories": ["sports", "entertainment"],
   "background_color": "#04060C",
   "theme_color": "#04060C",
   "icons": [
