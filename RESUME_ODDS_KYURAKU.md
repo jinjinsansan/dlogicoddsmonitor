@@ -17,6 +17,12 @@
 - **要手動**: ①Supabaseで `push_subscriptions` 作成(`docs/push_subscriptions.sql`, agkuプロジェクト) ②Vercel env `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`(初回デプロイで設定済のはず)。
 - 検証: 購読ゼロで安全終了 / 最急落算出OK(5/31東京12R=6番 3.6→2.8 -22.2%)。実プッシュは実機購読が要るので未送信テスト。
 
+### LINEログイン＝同時友だち追加(2026-06-05, commit 09d4de2) ★現行
+ゲートを本物のLINEログインに。`/api/auth/line/login`→LINE authorize(`scope=profile openid`, **`bot_prompt=aggressive`**=ログイン同意と同時に公式アカウントを友だち追加)→`/api/auth/line/callback`(code→token→profile, `ky_auth`+`ky_uid`クッキー付与)→`/board?login=1`。KyAppが `ky_auth`クッキー/`?login=1` を検知して登録済み扱い。LineGateは「LINEでログイン(友だち追加)」ボタン1つ(QR/2段廃止)。
+- LINEログインチャネルID=**2010308997**(シークレットはVercel env のみ)。友だち追加URL=https://lin.ee/5z7v2zK 。
+- Vercel env: `LINE_LOGIN_CHANNEL_ID` / `LINE_LOGIN_CHANNEL_SECRET` / `LINE_REDIRECT_ORIGIN=https://www.oddskun.com`。callback URL `…/api/auth/line/callback` をLINE側に登録済・公式アカウントlink済・友だち追加オプションON。
+- 実機テスト✅(ログイン→友だち追加→ゲート通過)。注: 静的JSON(bot.dlogicai.in/kyuraku)は公開のままなので厳密なデータ保護ではなくUX/友だち獲得目的のゲート。
+
 ### 週次スケジュール表示(2026-06-04, commit e7e5c1d)
 ボードを**対象日＋モードで自動切替**(JST、`build_static_board.py` の `decide()`)。
 - 金11:00→土09:00 = 土【preview 事前情報】/ 土09-17 = 土【live】/ 土17:00→日【preview】→日【live】/ 最終開催17:00以降〜次の前日11:00 = 【finished 結果】。連続開催日は前日17時に翌日へ切替。
