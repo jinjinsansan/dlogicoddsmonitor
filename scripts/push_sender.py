@@ -28,6 +28,18 @@ from pywebpush import webpush, WebPushException
 from scrapers.odds import fetch_jra_race_list
 
 JST = timezone(timedelta(hours=9))
+# race_id(12桁)のトラックコード(5-6桁目)→会場。scraperのvenueは誤るためrace_idから導出。
+VENUE_BY_CODE = {"01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京",
+                 "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉"}
+
+
+def venue_of(race_id, fallback=""):
+    try:
+        return VENUE_BY_CODE.get(str(race_id)[4:6], fallback)
+    except Exception:
+        return fallback
+
+
 BASE = "/opt/dlogic/odds-monitor"
 DATA = os.path.join(BASE, "data")
 VAPID_PRIV = os.path.join(DATA, "vapid_private.pem")
@@ -142,7 +154,7 @@ def main():
         name = ((entries.get(rid) or {}).get(str(best["num"])) or {})
         nm = name.get("name") if isinstance(name, dict) else (name or f"{best['num']}番")
         payload = json.dumps({
-            "title": f"{r.get('venue','')}{r.get('race_number','')}R まもなく発走",
+            "title": f"{venue_of(rid, r.get('venue',''))}{r.get('race_number','')}R まもなく発走",
             "body": f"直前で最も急落：{best['num']}番 {nm}　{best['base']:.1f}→{best['last']:.1f}倍 ({best['pct']}%)",
             "url": f"{SITE}/race/{rid}",
             "tag": f"ky-{rid}",
